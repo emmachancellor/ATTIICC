@@ -1,2 +1,2 @@
-# TRACTOR 🚜
-Time-based fluoRescent-microscopy imAge Cell Tracking for nanOwell images with deep leaRning
+# ATTIICC 🪜
+Automated Temporal Tumor Immune Interaction Chamber Capture
