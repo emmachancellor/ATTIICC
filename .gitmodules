@@ -1,0 +1,3 @@
+[submodule "attiicc/segment_anything/segment_anything"]
+	path = attiicc/segment_anything/segment_anything
+	url = git@github.com:emmachancellor/segment-anything.git
