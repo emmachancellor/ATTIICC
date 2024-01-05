@@ -48,7 +48,7 @@ class SamSegmenter:
             self.stability_score = [mask["stability_score"] for mask in self.sam_result]
             self.crop_box = [mask["crop_box"] for mask in self.sam_result]
 
-    def load_sam_model(self) -> sa.Sam:
+    def _load_sam_model(self) -> sa.Sam:
         '''
         Loads a pretrained SAM model.
         Input:
@@ -74,7 +74,7 @@ class SamSegmenter:
         print("Model Loaded")
         return sam
 
-    def segment_image(self):
+    def _segment_image(self):
         '''
         Segments an image using a pretrained SAM model.
         Outputs:
