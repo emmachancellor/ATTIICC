@@ -5,6 +5,7 @@ import os
 import supervision as sv
 import matplotlib.pyplot as plt
 from typing import Dict, Tuple
+from roifile import ImagejRoi
 from attiicc import segment_anything as sa
 
 class SamSegmenter:
@@ -35,10 +36,9 @@ class SamSegmenter:
         self.model_path = model_path
         self.model_type = model_type
         self._image_path = image_path
-        self.sam_result = None
+        self._sam_result = None
         self.img_bgr = None
         self.sam = None
-        self.sam_result = None
         self.segmentation = None
         self.area = None
         self.bbox = None
@@ -49,15 +49,15 @@ class SamSegmenter:
 
         if image_path is not None:
             self.sam = self._load_sam_model(model_type=model_type)
-            self.sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
-        if self.sam_result is not None:
-            self.segmentation = [mask["segmentation"] for mask in self.sam_result]
-            self.area = [mask["area"] for mask in self.sam_result]
-            self.bbox = [mask["bbox"] for mask in self.sam_result]
-            self.predicted_iou = [mask["predicted_iou"] for mask in self.sam_result]
-            self.point_coords = [mask["point_coords"] for mask in self.sam_result]
-            self.stability_score = [mask["stability_score"] for mask in self.sam_result]
-            self.crop_box = [mask["crop_box"] for mask in self.sam_result]
+            self._sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
+        if self._sam_result is not None:
+            self.segmentation = [mask["segmentation"] for mask in self._sam_result]
+            self.area = [mask["area"] for mask in self._sam_result]
+            self.bbox = [mask["bbox"] for mask in self._sam_result]
+            self.predicted_iou = [mask["predicted_iou"] for mask in self._sam_result]
+            self.point_coords = [mask["point_coords"] for mask in self._sam_result]
+            self.stability_score = [mask["stability_score"] for mask in self._sam_result]
+            self.crop_box = [mask["crop_box"] for mask in self._sam_result]
     
     @property
     def image_path(self):
@@ -65,15 +65,41 @@ class SamSegmenter:
     
     @image_path.setter
     def image_path(self, new_image_path):
+        '''
+        Update the image path and recalculate the segmentation results 
+        without re-loading the SAM model.
+        '''
         self._image_path = new_image_path
-        self.sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
-        self.segmentation = [mask["segmentation"] for mask in self.sam_result]
-        self.area = [mask["area"] for mask in self.sam_result]
-        self.bbox = [mask["bbox"] for mask in self.sam_result]
-        self.predicted_iou = [mask["predicted_iou"] for mask in self.sam_result]
-        self.point_coords = [mask["point_coords"] for mask in self.sam_result]
-        self.stability_score = [mask["stability_score"] for mask in self.sam_result]
-        self.crop_box = [mask["crop_box"] for mask in self.sam_result]
+        self._sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
+        self.segmentation = [mask["segmentation"] for mask in self._sam_result]
+        self.area = [mask["area"] for mask in self._sam_result]
+        self.bbox = [mask["bbox"] for mask in self._sam_result]
+        self.predicted_iou = [mask["predicted_iou"] for mask in self._sam_result]
+        self.point_coords = [mask["point_coords"] for mask in self._sam_result]
+        self.stability_score = [mask["stability_score"] for mask in self._sam_result]
+        self.crop_box = [mask["crop_box"] for mask in self._sam_result]
+
+    @property
+    def sam_result(self):
+        return self._sam_result
+    
+    @sam_result.setter
+    def sam_result(self, target_area=[11500,13600]):
+        '''
+        Filter the SAM results by area.
+        Inputs:
+            target_area (list, optional): The target area of the ROI.
+                Default is [11500,13600] which is the area of the nanowells where 
+                the first value is the lower bound and the second value is the upper bound.
+        '''
+        self._sam_result = [mask for mask in self._sam_result if area_filter[0] < mask['area'] < area_filter[1]]
+        self.segmentation = [mask["segmentation"] for mask in self._sam_result]
+        self.area = [mask["area"] for mask in self._sam_result]
+        self.bbox = [mask["bbox"] for mask in self._sam_result]
+        self.predicted_iou = [mask["predicted_iou"] for mask in self._sam_result]
+        self.point_coords = [mask["point_coords"] for mask in self._sam_result]
+        self.stability_score = [mask["stability_score"] for mask in self._sam_result]
+        self.crop_box = [mask["crop_box"] for mask in self._sam_result]
 
     def _load_sam_model(self, model_type) -> sa.Sam:
         '''
@@ -133,7 +159,7 @@ class SamSegmenter:
             None
         '''
         mask_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX)
-        detections = sv.Detections.from_sam(sam_result=self.sam_result)
+        detections = sv.Detections.from_sam(sam_result=self._sam_result)
         annotated_image = mask_annotator.annotate(scene=self.img_bgr.copy(), detections=detections)
         # Create a figure and a 1x2 grid of axes
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
@@ -169,7 +195,7 @@ class SamSegmenter:
         masks = [
         mask['segmentation']
         for mask
-        in sorted(self.sam_result, key=lambda x: x['area'], reverse=True)]
+        in sorted(self._sam_result, key=lambda x: x['area'], reverse=True)]
 
         num_images = len(masks)
         grid_size = grid_size
@@ -193,3 +219,59 @@ class SamSegmenter:
             if save:
                 plt.savefig(save_path)    
         return
+
+    def generate_rois(self, target_area=[11500,13600],
+                            similarity_filter=10,
+                            save=False, save_path=None):
+        '''
+        Generate ROIs from the segmentation results.
+        Inputs:
+            target_area (int, optional): The target area of the ROI. Default is 11500.
+            similarity_filter (int, optional): When filtering for duplicate ROIs
+                this method will search for ROI centroids that are within +/-
+                a number of pixels (similarity_filter). Default is 10 pixels.
+            save (bool, optional): Whether to save all ROI files for a given image. Default is False.
+            save_path (str, optional): The path to a directory where ROIs can be saved. Default is None.    
+        Outputs:
+            roi_dict (dict): A dictionary containing the image name as the key (str)
+                and a list of ROI objects as the value.
+        '''
+        image_name = os.path.basename(self.image_path).rstrip(".png")
+        seg_num = 1
+        centroid_list = []
+        duplicate_list = []
+        self.sam_result = target_area
+        for seg in self.segmentation:
+            binary_image = np.uint8(seg) * 255
+            contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                M = cv2.moments(contour)
+                if area > 11500: # only select contours that are the nanowells (some small contours from cells may be present)
+                    points = contour.squeeze().tolist()
+                    roi = ImagejRoi.frompoints(points)
+                    if M["m00"] != 0: # calculate the centroid to allow filtering of duplicate nanowells
+                        cX = int(M["m10"] / M["m00"])
+                        cY = int(M["m01"] / M["m00"])
+                        coords_id = [cX, cY, roi, seg_num]
+                        centroid_list.append(coords_id)
+            seg_num += 1
+            # Sort the list of lists by the value at index 0
+            centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
+            # Remove duplicates
+            for i in range(len(centroid_list_sorted) - 1):
+                x, y, roi, seg_num = centroid_list_sorted[i]
+                x_next, y_next, roi, seg_num = centroid_list_sorted[i + 1]
+                if abs(x - x_next) < similarity_filter and abs(y - y_next) < similarity_filter:
+                    duplicate_list.append(centroid_list_sorted[i])
+                    print("Duplicate Value 1:", (x, y), "Duplicate Value 2:", (x_next, y_next))
+            centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
+            print("Total number of ROIs: ", len(centroid_list_sorted))
+            y_centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
+            roi_dict = {image_name: [roi for y_centroid_list_sorted[2] in y_centroid_list_sorted]}
+            if save:
+                for i, j in enumerate(centroid_list_sorted):
+                    roi = j[2]
+                    roi_name = f"{image_name}_ROI_{i+1}.roi"
+                    roi.save(os.path.join(save_path, roi_name))
+            return roi_dict 
