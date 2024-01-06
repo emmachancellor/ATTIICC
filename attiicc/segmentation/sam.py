@@ -92,7 +92,7 @@ class SamSegmenter:
                 Default is [11500,13600] which is the area of the nanowells where 
                 the first value is the lower bound and the second value is the upper bound.
         '''
-        self._sam_result = [mask for mask in self._sam_result if area_filter[0] < mask['area'] < area_filter[1]]
+        self._sam_result = [mask for mask in self._sam_result if target_area[0] < mask['area'] < target_area[1]]
         self.segmentation = [mask["segmentation"] for mask in self._sam_result]
         self.area = [mask["area"] for mask in self._sam_result]
         self.bbox = [mask["bbox"] for mask in self._sam_result]
