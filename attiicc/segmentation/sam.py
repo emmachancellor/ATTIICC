@@ -34,7 +34,7 @@ class SamSegmenter:
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
         self.model_path = model_path
         self.model_type = model_type
-        self.image_path = image_path
+        self._image_path = image_path
         self.sam_result = None
         self.img_bgr = None
         self.sam = None
@@ -49,7 +49,7 @@ class SamSegmenter:
 
         if image_path is not None:
             self.sam = self._load_sam_model(model_type=model_type)
-            self.sam_result, self.img_bgr = self._segment_image(self.sam, self.image_path)
+            self.sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
         if self.sam_result is not None:
             self.segmentation = [mask["segmentation"] for mask in self.sam_result]
             self.area = [mask["area"] for mask in self.sam_result]
@@ -59,6 +59,22 @@ class SamSegmenter:
             self.stability_score = [mask["stability_score"] for mask in self.sam_result]
             self.crop_box = [mask["crop_box"] for mask in self.sam_result]
     
+    @property
+    def image_path(self):
+        return self._image_path
+    
+    @image_path.setter
+    def image_path(self, new_image_path):
+        self._image_path = new_image_path
+        self.sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
+        self.segmentation = [mask["segmentation"] for mask in self.sam_result]
+        self.area = [mask["area"] for mask in self.sam_result]
+        self.bbox = [mask["bbox"] for mask in self.sam_result]
+        self.predicted_iou = [mask["predicted_iou"] for mask in self.sam_result]
+        self.point_coords = [mask["point_coords"] for mask in self.sam_result]
+        self.stability_score = [mask["stability_score"] for mask in self.sam_result]
+        self.crop_box = [mask["crop_box"] for mask in self.sam_result]
+
     def _load_sam_model(self, model_type) -> sa.Sam:
         '''
         Loads a pretrained SAM model.
