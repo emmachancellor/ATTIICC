@@ -247,7 +247,7 @@ class SamSegmenter:
             for contour in contours:
                 area = cv2.contourArea(contour)
                 M = cv2.moments(contour)
-                if area > 11500: # only select contours that are the nanowells (some small contours from cells may be present)
+                if area > target_area[0]: # only select contours that are the nanowells (some small contours from cells may be present)
                     points = contour.squeeze().tolist()
                     roi = ImagejRoi.frompoints(points)
                     if M["m00"] != 0: # calculate the centroid to allow filtering of duplicate nanowells
@@ -274,4 +274,4 @@ class SamSegmenter:
                     roi = j[2]
                     roi_name = f"{image_name}_ROI_{i+1}.roi"
                     roi.save(os.path.join(save_path, roi_name))
-            return roi_dict 
+        return roi_dict 
