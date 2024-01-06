@@ -301,6 +301,7 @@ class SamSegmenter:
                 seg_num = [seg_num for x, y, roi, seg_num in y_centroid_list_sorted]
                 # Create a scatter plot of the centroids
                 plt.scatter(*zip(*centroids), marker='o')
+                plt.title(f"Centroids for {image_name}")
                 # Annotate each point with its label
                 for (x, y), i in zip(centroids, range(len(centroids))):
                     plt.text(x, y, str(i))
