@@ -34,7 +34,10 @@ class SamSegmenter:
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
         self.model_path = model_path
         self.model_type = model_type
-        self.sam = self._load_sam_model(self.model_type)
+        self.image_path = image_path
+        self.sam_result = None
+        self.img_bgr = None
+        self.sam = None
         self.sam_result = None
         self.segmentation = None
         self.area = None
@@ -45,7 +48,7 @@ class SamSegmenter:
         self.crop_box = None
 
         if image_path is not None:
-            self.image_path = image_path
+            self.sam = self._load_sam_model(model_type=model_type)
             self.sam_result, self.img_bgr = self._segment_image(self.sam, self.image_path)
         if self.sam_result is not None:
             self.segmentation = [mask["segmentation"] for mask in self.sam_result]
@@ -55,7 +58,7 @@ class SamSegmenter:
             self.point_coords = [mask["point_coords"] for mask in self.sam_result]
             self.stability_score = [mask["stability_score"] for mask in self.sam_result]
             self.crop_box = [mask["crop_box"] for mask in self.sam_result]
-
+    
     def _load_sam_model(self, model_type) -> sa.Sam:
         '''
         Loads a pretrained SAM model.
@@ -78,6 +81,7 @@ class SamSegmenter:
         sam = sa.sam_model_registry[MODEL_TYPE](checkpoint=self.model_path).to(device=DEVICE)
         print("Model Loaded")
         return sam
+
 
     def _segment_image(self, sam, image_path) -> Tuple[Dict, np.ndarray]:
         '''
@@ -119,7 +123,7 @@ class SamSegmenter:
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
         # Plot the images onto the axes
-        axs[0].imshow(self.image_bgr)
+        axs[0].imshow(self.img_bgr)
         axs[0].set_title('source image')
         axs[0].axis('off')
 
