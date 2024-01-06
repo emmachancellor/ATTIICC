@@ -237,13 +237,15 @@ class SamSegmenter:
             roi_archive (bool, optional): Whether to save the ROIs as a .zip. Default is True.
                 This will save the roi.zip file in the roi_path. Default is True.        
         Outputs:
-            roi_dict (dict): A dictionary containing the image name as the key (str)
-                and a list of ROI objects as the value.
+            roi_dict (dict): A dictionary containing the roi number sorted by 
+             y-axis centroid value as the key (str) and its corresponding roi object
+             as the value.
         '''
         image_name = os.path.basename(self.image_path).rstrip(".png")
         seg_num = 1
         centroid_list = []
         duplicate_list = []
+        roi_dict = {}
         self.sam_result = target_area
         for seg in self.segmentation:
             binary_image = np.uint8(seg) * 255
@@ -272,7 +274,8 @@ class SamSegmenter:
         centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
         print("Total number of ROIs: ", len(centroid_list_sorted))
         y_centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
-        roi_dict = {image_name: [roi[2] for roi in y_centroid_list_sorted]}
+        for i in range(len(y_centroid_list_sorted)):
+            roi_dict[i] = y_centroid_list_sorted[2]
         if roi_path is not None:
             print("Saving ROIs to: ", roi_path+'/'+image_name)
             new_path = os.path.join(roi_path, image_name)
