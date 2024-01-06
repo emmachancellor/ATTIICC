@@ -222,7 +222,7 @@ class SamSegmenter:
 
     def generate_rois(self, target_area=[11500,13600],
                             similarity_filter=10,
-                            save=False, save_path=None):
+                            save_path=None):
         '''
         Generate ROIs from the segmentation results.
         Inputs:
@@ -230,7 +230,6 @@ class SamSegmenter:
             similarity_filter (int, optional): When filtering for duplicate ROIs
                 this method will search for ROI centroids that are within +/-
                 a number of pixels (similarity_filter). Default is 10 pixels.
-            save (bool, optional): Whether to save all ROI files for a given image. Default is False.
             save_path (str, optional): The path to a directory where ROIs can be saved. Default is None.    
         Outputs:
             roi_dict (dict): A dictionary containing the image name as the key (str)
@@ -256,22 +255,28 @@ class SamSegmenter:
                         coords_id = [cX, cY, roi, seg_num]
                         centroid_list.append(coords_id)
             seg_num += 1
-            # Sort the list of lists by the value at index 0
-            centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
-            # Remove duplicates
-            for i in range(len(centroid_list_sorted) - 1):
-                x, y, roi, seg_num = centroid_list_sorted[i]
-                x_next, y_next, roi, seg_num = centroid_list_sorted[i + 1]
-                if abs(x - x_next) < similarity_filter and abs(y - y_next) < similarity_filter:
-                    duplicate_list.append(centroid_list_sorted[i])
-                    print("Duplicate Value 1:", (x, y), "Duplicate Value 2:", (x_next, y_next))
-            centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
-            print("Total number of ROIs: ", len(centroid_list_sorted))
-            y_centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
-            roi_dict = {image_name: [roi for y_centroid_list_sorted[2] in y_centroid_list_sorted]}
-            if save:
-                for i, j in enumerate(centroid_list_sorted):
-                    roi = j[2]
-                    roi_name = f"{image_name}_ROI_{i+1}.roi"
-                    roi.save(os.path.join(save_path, roi_name))
+        # Sort the list of lists by the value at index 0
+        centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
+        # Remove duplicates
+        for i in range(len(centroid_list_sorted) - 1):
+            x, y, roi, seg_num = centroid_list_sorted[i]
+            x_next, y_next, roi, seg_num = centroid_list_sorted[i + 1]
+            if abs(x - x_next) < similarity_filter and abs(y - y_next) < similarity_filter:
+                duplicate_list.append(centroid_list_sorted[i])
+                print("Duplicate Value 1:", (x, y), "Duplicate Value 2:", (x_next, y_next))
+        centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
+        print("Total number of ROIs: ", len(centroid_list_sorted))
+        y_centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
+        roi_dict = {image_name: [roi[2] for roi in y_centroid_list_sorted]}
+        if save_path is not None:
+            print("Saving ROIs to: ", save_path+'/'+image_name)
+            new_path = os.path.join(save_path, image_name)
+            if not os.path.exists(new_path):
+                print("Making directory at: ", new_path)
+                os.makedirs(new_path)
+            for i, j in enumerate(centroid_list_sorted):
+                roi = j[2]
+                roi_name = f"{image_name}_ROI_{i+1}.roi"
+                roi.tofile(os.path.join(new_path, roi_name))
+            print(f"ROIs saved for {image_name}")
         return roi_dict 
