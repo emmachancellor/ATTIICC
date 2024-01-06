@@ -3,7 +3,8 @@ import torch
 import cv2
 import os
 import supervision as sv
-import pkg_resources
+import matplotlib.pyplot as plt
+from typing import Dict, Tuple
 from attiicc import segment_anything as sa
 
 class SamSegmenter:
@@ -45,7 +46,7 @@ class SamSegmenter:
 
         if image_path is not None:
             self.image_path = image_path
-            self.sam_result = self._segment_image(self.sam, self.image_path)
+            self.sam_result, self.img_bgr = self._segment_image(self.sam, self.image_path)
         if self.sam_result is not None:
             self.segmentation = [mask["segmentation"] for mask in self.sam_result]
             self.area = [mask["area"] for mask in self.sam_result]
@@ -78,7 +79,7 @@ class SamSegmenter:
         print("Model Loaded")
         return sam
 
-    def _segment_image(self, sam, image_path):
+    def _segment_image(self, sam, image_path) -> Tuple[Dict, np.ndarray]:
         '''
         Segments an image using a pretrained SAM model.
         Inputs:
@@ -98,4 +99,77 @@ class SamSegmenter:
         image_bgr = cv2.imread(image_path) # cv2 reads in BGR format
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
         sam_result = mask_generator.generate(image_rgb)
-        return sam_result
+        return sam_result, image_bgr
+    
+    def plot_segmented_image(self, titles=['Source Image', 'Segmented Image'], 
+                             save=False, save_path=None) -> None:
+        '''
+        Plots the original image and the segmented image side-by-side.
+        Inputs:
+            titles (list, optional): The titles to use for the images. Default is ['Source Image', 'Segmented Image'].
+            save (bool, optional): Whether to save the image. Default is False.
+            save_path (str, optional): The path to save the image. Default is None.
+        Outputs:
+            None
+        '''
+        mask_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX)
+        detections = sv.Detections.from_sam(sam_result=self.sam_result)
+        annotated_image = mask_annotator.annotate(scene=self.img_bgr.copy(), detections=detections)
+        # Create a figure and a 1x2 grid of axes
+        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+
+        # Plot the images onto the axes
+        axs[0].imshow(self.image_bgr)
+        axs[0].set_title('source image')
+        axs[0].axis('off')
+
+        axs[1].imshow(annotated_image)
+        axs[1].set_title('segmented image')
+        axs[1].axis('off')
+
+        if save:
+        # Save the figure
+            fig.savefig(save_path)
+        # Display the figure
+        plt.show()
+        return 
+
+    def plot_masks(self, save=False, save_path=None, 
+                   grid_size=(30, 5), size=(48,96)) -> None:
+        '''
+        Plots masks from the segmentation results.
+        Inputs:
+            save (bool, optional): Whether to save the image. Default is False.
+            save_path (str, optional): The path to save the image. Default is None.
+            grid_size (tuple, optional): The grid size for the plot. Default is (9,10).
+            size (tuple, optional): The size of the plot. Default is (48,96).
+        Outputs:
+            None
+        '''
+        masks = [
+        mask['segmentation']
+        for mask
+        in sorted(self.sam_result, key=lambda x: x['area'], reverse=True)]
+
+        num_images = len(masks)
+        grid_size = grid_size
+
+        # Create a figure and a grid of axes
+        fig, axs = plt.subplots(*grid_size, figsize=size)
+
+        # Reshape axs to 1-D array to easily iterate over
+        axs = axs.ravel()
+
+        # Plot the images onto the axes
+        for i in range(num_images):
+            axs[i].imshow(masks[i])
+            axs[i].axis('off')
+
+        # Remove unused subplots
+        if num_images < np.prod(grid_size):
+            for j in range(num_images, np.prod(grid_size)):
+                fig.delaxes(axs[j])
+
+            if save:
+                plt.savefig(save_path)    
+        return
