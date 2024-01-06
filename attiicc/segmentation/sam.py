@@ -14,18 +14,24 @@ class SamSegmenter:
 
     def __init__( 
         self,
+        model_path: str = None,
         model_type: str = "vit_h",
         image_path: str = None,
     ) -> None:
         '''
         Initialize a SAM model and calculate the segmentation for an image.
         Inputs:
+            model_path (str): The path to the model checkpoint. This must be downloaded
+                from Meta on a user's local machine. Checkpoints can be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
             model_type (str, optional): Specify the sam model type to load.
             Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
             image_path (str, optional): The path to the image to segment. 
         Outputs:
             None
         '''
+        assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified. \
+            Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
+        self.model_path = model_path
         self.model_type = model_type
         self.sam = self._load_sam_model(self.model_type)
         self.sam_result = None
@@ -66,16 +72,9 @@ class SamSegmenter:
         
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
         DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        # Path to the checkpoint file
-        if model_type == "vit_h":
-            CHECKPOINT_PATH = pkg_resources.resource_filename('attiicc', 'segment_anything/weights/sam_vit_h_4b8939.pth')
-        elif model_type == "vit_b":
-            CHECKPOINT_PATH = pkg_resources.resource_filename('attiicc', 'segment_anything/weights/sam_vit_b_4b8939.pth')
-        elif model_type == "vit_l":
-            CHECKPOINT_PATH = pkg_resources.resource_filename('attiicc', 'segment_anything/weights/sam_vit_l_4b8939.pth')
         MODEL_TYPE = model_type
         # Load the model
-        sam = sa.sam_model_registry[MODEL_TYPE](checkpoint=CHECKPOINT_PATH).to(device=DEVICE)
+        sam = sa.sam_model_registry[MODEL_TYPE](checkpoint=self.model_path).to(device=DEVICE)
         print("Model Loaded")
         return sam
 
