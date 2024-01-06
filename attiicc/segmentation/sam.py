@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import zipfile
 from typing import Dict, Tuple
 from roifile import ImagejRoi
+import attiicc as ac
 from attiicc import segment_anything as sa
 
 class SamSegmenter:
