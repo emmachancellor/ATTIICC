@@ -225,7 +225,9 @@ class SamSegmenter:
     def generate_rois(self, target_area=[11500,13600],
                             similarity_filter=10,
                             roi_path=None,
-                            roi_archive=True):
+                            roi_archive=True,
+                            validation_plot=False,
+                            validation_path=None):
         '''
         Generate ROIs from the segmentation results.
         Inputs:
@@ -294,4 +296,20 @@ class SamSegmenter:
                         for file in files:
                             zipf.write(os.path.join(root, file), file)
                 print(f"ROIs archived for {image_name}")
+            if validation_plot:
+                centroids = [(x, y) for x, y, roi, seg_num in y_centroid_list_sorted]
+                seg_num = [seg_num for x, y, roi, seg_num in y_centroid_list_sorted]
+                # Create a scatter plot of the centroids
+                plt.scatter(*zip(*centroids), marker='o')
+                # Annotate each point with its label
+                for (x, y), i in zip(centroids, range(len(centroids))):
+                    plt.text(x, y, str(i))
+                if validation_path is None:
+                    validation_dir = os.path.join(roi_path, "validation_plots")
+                    if not os.path.exists(validation_dir):
+                        print("Making directory at: ", validation_dir)
+                        os.makedirs(validation_dir)
+                    plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
+                else:
+                    plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
         return roi_dict 
