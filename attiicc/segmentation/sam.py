@@ -246,17 +246,18 @@ class SamSegmenter:
             roi_archive (bool, optional): Whether to save the ROIs as a .zip. Default is True.
                 This will save the roi.zip file in the roi_path. Default is True.        
         Outputs:
-            roi_dict (dict): A dictionary containing the roi number sorted by 
-             y-axis centroid value as the key (str) and its corresponding roi object
-             as the value.
+            roi_and_box_list: a list of lists containing the ROIs and the bounding boxes, sorted
+                in order by the y-coordinate of the centroid. The first list contains ROIs
+                and the second list contains lists of the box coordinates in XYWH format.
         '''
         image_name = os.path.basename(self.image_path).rstrip(".png")
         seg_num = 1
         centroid_list = []
         duplicate_list = []
-        roi_dict = {}
+        roi_list = []
+        box_list = []
         self.sam_result = target_area
-        for seg in self.segmentation:
+        for seg, box in zip(self.segmentation, self.bbox):
             binary_image = np.uint8(seg) * 255
             contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for contour in contours:
@@ -268,23 +269,26 @@ class SamSegmenter:
                     if M["m00"] != 0: # calculate the centroid to allow filtering of duplicate nanowells
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
-                        coords_id = [cX, cY, roi, seg_num]
+                        coords_id = [cX, cY, roi, seg_num, box]
                         centroid_list.append(coords_id)
             seg_num += 1
         # Sort the list of lists by the value at index 0
         centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
         # Remove duplicates
         for i in range(len(centroid_list_sorted) - 1):
-            x, y, roi, seg_num = centroid_list_sorted[i]
-            x_next, y_next, roi, seg_num = centroid_list_sorted[i + 1]
+            x, y, roi, seg_num, box = centroid_list_sorted[i]
+            x_next, y_next, roi, seg_num, box = centroid_list_sorted[i + 1]
             if abs(x - x_next) < similarity_filter and abs(y - y_next) < similarity_filter:
                 duplicate_list.append(centroid_list_sorted[i])
                 print("Duplicate Value 1:", (x, y), "Duplicate Value 2:", (x_next, y_next))
         centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
         print("Total number of ROIs: ", len(centroid_list_sorted))
         y_centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
-        for i in range(len(y_centroid_list_sorted)):
-            roi_dict[i] = y_centroid_list_sorted[2]
+        for i in y_centroid_list_sorted:
+            # print(y_centroid_list_sorted[2])
+            roi_list.append(i[2])
+            box_list.append(i[4])
+        roi_and_box_list = [roi_list, box_list]
         if roi_path is not None:
             print("Saving ROIs to: ", roi_path+'/'+image_name)
             new_path = os.path.join(roi_path, image_name)
@@ -304,8 +308,8 @@ class SamSegmenter:
                             zipf.write(os.path.join(root, file), file)
                 print(f"ROIs archived for {image_name}")
             if validation_plot:
-                centroids = [(x, y) for x, y, roi, seg_num in y_centroid_list_sorted]
-                seg_num = [seg_num for x, y, roi, seg_num in y_centroid_list_sorted]
+                centroids = [(x, y) for x, y, roi, seg_num, box in y_centroid_list_sorted]
+                seg_num = [seg_num for x, y, roi, seg_num, box in y_centroid_list_sorted]
                 # Create a scatter plot of the centroids
                 plt.scatter(*zip(*centroids), marker='o')
                 plt.title(f"Centroids for {image_name}")
@@ -320,5 +324,5 @@ class SamSegmenter:
                     plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
                 else:
                     plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
-        return roi_dict 
+        return roi_and_box_list
     
