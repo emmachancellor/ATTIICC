@@ -4,6 +4,7 @@ import cv2
 import os
 import supervision as sv
 import matplotlib.pyplot as plt
+import zipfile
 from typing import Dict, Tuple
 from roifile import ImagejRoi
 from attiicc import segment_anything as sa
@@ -222,7 +223,8 @@ class SamSegmenter:
 
     def generate_rois(self, target_area=[11500,13600],
                             similarity_filter=10,
-                            save_path=None):
+                            roi_path=None,
+                            roi_archive=True):
         '''
         Generate ROIs from the segmentation results.
         Inputs:
@@ -230,7 +232,9 @@ class SamSegmenter:
             similarity_filter (int, optional): When filtering for duplicate ROIs
                 this method will search for ROI centroids that are within +/-
                 a number of pixels (similarity_filter). Default is 10 pixels.
-            save_path (str, optional): The path to a directory where ROIs can be saved. Default is None.    
+            roi_path (str, optional): The path to a directory where ROIs can be saved. Default is None.    
+            roi_archive (bool, optional): Whether to save the ROIs as a .zip. Default is True.
+                This will save the roi.zip file in the roi_path. Default is True.        
         Outputs:
             roi_dict (dict): A dictionary containing the image name as the key (str)
                 and a list of ROI objects as the value.
@@ -268,9 +272,9 @@ class SamSegmenter:
         print("Total number of ROIs: ", len(centroid_list_sorted))
         y_centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
         roi_dict = {image_name: [roi[2] for roi in y_centroid_list_sorted]}
-        if save_path is not None:
-            print("Saving ROIs to: ", save_path+'/'+image_name)
-            new_path = os.path.join(save_path, image_name)
+        if roi_path is not None:
+            print("Saving ROIs to: ", roi_path+'/'+image_name)
+            new_path = os.path.join(roi_path, image_name)
             if not os.path.exists(new_path):
                 print("Making directory at: ", new_path)
                 os.makedirs(new_path)
@@ -279,4 +283,11 @@ class SamSegmenter:
                 roi_name = f"{image_name}_ROI_{i+1}.roi"
                 roi.tofile(os.path.join(new_path, roi_name))
             print(f"ROIs saved for {image_name}")
+            if roi_archive:
+                print("Archiving ROIs to: ", f'{roi_path}/{image_name}_roi.zip')
+                with zipfile.ZipFile(f'{roi_path}/{image_name}_rois.zip', 'w') as zipf:
+                    for root, _, files in os.walk(new_path):
+                        for file in files:
+                            zipf.write(os.path.join(root, file), file)
+                print(f"ROIs archived for {image_name}")
         return roi_dict 
