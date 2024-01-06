@@ -21,6 +21,7 @@ class SamSegmenter:
         model_path: str = None,
         model_type: str = "vit_h",
         image_path: str = None,
+        tif_path: str = None
     ) -> None:
         '''
         Initialize a SAM model and calculate the segmentation for an image.
@@ -30,6 +31,9 @@ class SamSegmenter:
             model_type (str, optional): Specify the sam model type to load.
             Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
             image_path (str, optional): The path to the image to segment. 
+            Default is None.
+            tif_path (str, optional): The path to the tif image to crop with 
+                the ROIs. Default is None.
         Outputs:
             None
         '''
@@ -38,6 +42,7 @@ class SamSegmenter:
         self.model_path = model_path
         self.model_type = model_type
         self._image_path = image_path
+        self.tif_path = tif_path
         self._sam_result = None
         self.img_bgr = None
         self.sam = None
@@ -66,10 +71,11 @@ class SamSegmenter:
         return self._image_path
     
     @image_path.setter
-    def image_path(self, new_image_path):
+    def image_path(self, new_image_path, new_tif_path=None):
         '''
         Update the image path and recalculate the segmentation results 
-        without re-loading the SAM model.
+        without re-loading the SAM model. You can also update the tif_path.
+        If no new tif_path is specified, the tif_path will be set to None.
         '''
         self._image_path = new_image_path
         self._sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
@@ -80,6 +86,7 @@ class SamSegmenter:
         self.point_coords = [mask["point_coords"] for mask in self._sam_result]
         self.stability_score = [mask["stability_score"] for mask in self._sam_result]
         self.crop_box = [mask["crop_box"] for mask in self._sam_result]
+        self.tif_path = new_tif_path
 
     @property
     def sam_result(self):
@@ -314,3 +321,4 @@ class SamSegmenter:
                 else:
                     plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
         return roi_dict 
+    
