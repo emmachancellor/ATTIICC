@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import attiicc as ac
 
@@ -21,7 +22,8 @@ class NanoExperiment:
             channel_id: str = None,
             num_channels: int = None,
             time_point_id: str = None,
-            num_time_points: int = None
+            num_time_points: int = None,
+            field_leading_zero: bool = False
     ) -> None:
         '''Initialize a NanoExperiment object.
         The experimental data should be organized as a directory tree with the following structure:
@@ -47,6 +49,7 @@ class NanoExperiment:
             num_channels: (int) The number of channels in the experiment.
             time_point_id: (str) The time point identifier used in file names.
             num_time_points: (int) The number of time points in the experiment.
+            field_leading_zero: (bool) Whether the field of view identifier has a leading zero.
         Outputs:
             None
         '''
@@ -67,6 +70,7 @@ class NanoExperiment:
         self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
                                channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
                                time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
+        self.field_leading_zero = field_leading_zero
 
     @property
     def structure(self) -> str:
@@ -91,6 +95,62 @@ class NanoExperiment:
         self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
                                channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
                                time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
+
+    def segment_and_crop(self, output_directory: str = None, 
+                            png: bool =False) -> None:
+        '''
+        Segment and crop the images in the experiment.
+        Takes in images that are ordered by the experiment structure, then
+        segments and cross the images well-wise. The cropped images and their
+        ROIs will be saved in individual directories for each well. The structure
+        of the output directory will be:
+            output_directory/
+                ROI/
+                    field_id_0_channel_id_0_well_id_0/
+                        image_time_point_id_0_well_id_0.roi
+                        image_time_point_id_1_well_id_0.roi
+                        ...
+                images/
+                    field_id_0_channel_id_0_well_id_0/
+                        image_time_point_id_0_well_id_0.tif
+                        image_time_point_id_1_well_id_0.tif
+                        ...
+        Inputs:
+            output_directory: (str) The path to the output directory. This will house
+                subdirectories for the ROIs and cropped images.
+            png: (bool) Whether PNG images exist in the experiment directory. If True,
+                the PNG existing PNG images will be used for segmentation. If False,
+                the TIF images will be converted to PNG and saved in a new directory.
+                These images will be used for segmentation. If PNG images exist,
+                the directory must follow the same structure as the TIF directory, with 
+                the directory extension 'png.' For example, '/experiment_path/field_id_0_channel_id_0_png/'.
+            
+        '''
+        roi_path = output_directory + '/ROI'
+        image_path = output_directory + '/cropped_images'
+        convert_png = False
+        if not os.path.exists(roi_path):
+            os.makedirs(roi_path)
+        if not os.path.exists(image_path):
+            os.makedirs(image_path)
+        # Get path to image
+        for c in range(self._num_channels):
+            channel_str = str(c)
+            for f in range(self._num_fields):
+                if self.field_leading_zero and f < 10:
+                    field_str = '0' + str(f)
+                else:
+                    field_str = str(f)
+                image_directory_path = f'{self._experiment_path}/{field_str}{channel_str}'
+                if png:
+                    image_directory_path = image_directory_path + '_png'
+                else:
+                    convert_png = True
+                for i in os.listdir(image_directory_path):
+                    if convert_png:
+                        ac.convert_tif_to_png(image_directory_path)
+            
+         
 
 
 
