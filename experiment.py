@@ -157,12 +157,17 @@ class NanoExperiment:
                 convert_tif_to_png(tif_image_directory_path)
             png_image_directory_path = tif_image_directory_path + '_png'
             # Segment images
-            for i in os.listdir(png_image_directory_path):
+            for i, j in enumerate(os.listdir(png_image_directory_path)):
+                image_path=png_image_directory_path + '/' + j
+                tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
                 if i == 0:
                     segmentation = ac.SamSegmenter(model_path=model_path, 
                                                    model_type=model_type, 
-                                                   image_path=png_image_directory_path + '/' + i,
-                                                   tif_path=tif_image_directory_path + '/' + i.rstrip('.png') + '.TIF')
+                                                   image_path=image_path,
+                                                   tif_path=tif_path)
+                else:
+                    segmentation.image_path = (image_path, tif_path)
+                #TODO:Save the segmentation results into dictionary ... 
 
 
             

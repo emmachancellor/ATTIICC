@@ -69,16 +69,15 @@ class SamSegmenter:
     
     @property
     def image_path(self) -> str:
-        return self._image_path
+        return self._image_path, self.tif_path
     
     @image_path.setter
-    def image_path(self, new_image_path, new_tif_path=None) -> None:
+    def image_path(self, img_paths) -> None:
         '''
         Update the image path and recalculate the segmentation results 
-        without re-loading the SAM model. You can also update the tif_path.
-        If no new tif_path is specified, the tif_path will be set to None.
+        without re-loading the SAM model. 
         '''
-        self._image_path = new_image_path
+        self._image_path, self._tif_path = img_paths
         self._sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
         self.segmentation = [mask["segmentation"] for mask in self._sam_result]
         self.area = [mask["area"] for mask in self._sam_result]
@@ -87,7 +86,6 @@ class SamSegmenter:
         self.point_coords = [mask["point_coords"] for mask in self._sam_result]
         self.stability_score = [mask["stability_score"] for mask in self._sam_result]
         self.crop_box = [mask["crop_box"] for mask in self._sam_result]
-        self.tif_path = new_tif_path
 
     @property
     def sam_result(self) -> Dict:
