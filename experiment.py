@@ -64,6 +64,33 @@ class NanoExperiment:
         self._num_channels = num_channels
         self._time_point_id = time_point_id
         self._num_time_points = num_time_points
-        self._structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
+        self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
                                channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
                                time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
+
+    @property
+    def structure(self) -> str:
+        return self.structure
+    
+    @structure.setter
+    def structure(self, field_id,
+                  num_fields,
+                  channel_id,
+                  num_channels,
+                  time_point_id,
+                  num_time_points) -> None:
+        '''
+        Set the structure of the experiment.
+        '''
+        self._field_id = field_id
+        self._num_fields = num_fields
+        self._channel_id = channel_id
+        self._num_channels = num_channels
+        self._time_point_id = time_point_id
+        self._num_time_points = num_time_points
+        self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
+                               channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
+                               time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
+
+
+
