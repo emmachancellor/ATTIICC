@@ -25,9 +25,9 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
     if not os.path.exists(png_path):
         os.makedirs(png_path)
     for i, f in enumerate(files):
-        if '.TIF' in f:
+        if '.TIF' in f and '._' not in f:
             print(f'({i}/{total})  Converting image {f} to .png')
-            name = f'{tif_path}/f'
+            name = f'{tif_path}/{f}'
             im = np.array(Image.open(name))
             im = Image.fromarray(im / np.amax(im) * 255)
             im = im.convert("L")
