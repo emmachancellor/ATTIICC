@@ -67,11 +67,11 @@ class SamSegmenter:
             self.crop_box = [mask["crop_box"] for mask in self._sam_result]
     
     @property
-    def image_path(self):
+    def image_path(self) -> str:
         return self._image_path
     
     @image_path.setter
-    def image_path(self, new_image_path, new_tif_path=None):
+    def image_path(self, new_image_path, new_tif_path=None) -> None:
         '''
         Update the image path and recalculate the segmentation results 
         without re-loading the SAM model. You can also update the tif_path.
@@ -89,11 +89,11 @@ class SamSegmenter:
         self.tif_path = new_tif_path
 
     @property
-    def sam_result(self):
+    def sam_result(self) -> Dict:
         return self._sam_result
     
     @sam_result.setter
-    def sam_result(self, target_area=[11500,13600]):
+    def sam_result(self, target_area=[11500,13600]) -> None:
         '''
         Filter the SAM results by area.
         Inputs:
