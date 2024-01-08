@@ -27,7 +27,8 @@ class SamSegmenter:
         Initialize a SAM model and calculate the segmentation for an image.
         Inputs:
             model_path (str): The path to the model checkpoint. This must be downloaded
-                from Meta on a user's local machine. Checkpoints can be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
+                from Meta on a user's local machine. Checkpoints can be downloaded from \
+                https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
             model_type (str, optional): Specify the sam model type to load.
             Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
             image_path (str, optional): The path to the image to segment. 
@@ -37,7 +38,7 @@ class SamSegmenter:
         Outputs:
             None
         '''
-        assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified. \
+        assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified for segmentation. \
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
         self.model_path = model_path
         self.model_type = model_type

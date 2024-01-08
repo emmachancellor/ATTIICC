@@ -19,7 +19,6 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
     '''
     files = os.listdir(tif_path)
     total = len(files)
-    file_names = []
     if png_path is None:
         png_path = tif_path + '_png'
     if not os.path.exists(png_path):
@@ -33,7 +32,8 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
             im = im.convert("L")
 
             # Rename file
-            file_name = str(f.replace(' ', '')).rstrip(".TIF")
+            #file_name = str(f.replace(' ', '')).rstrip(".TIF")
+            file_name = str(f).rstrip(".TIF")
             print(file_name)
             new_name = f'{png_path}/{file_name}'
             print(new_name)

@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import attiicc as ac
+from experiment_utils import convert_tif_to_png
 
 class NanoExperiment:
     '''Apply segmentation functions to an experiment with multiple channels, 
@@ -23,6 +24,7 @@ class NanoExperiment:
             num_channels: int = None,
             time_point_id: str = None,
             num_time_points: int = None,
+            segment_channel: int = None,
             field_leading_zero: bool = False
     ) -> None:
         '''Initialize a NanoExperiment object.
@@ -49,6 +51,7 @@ class NanoExperiment:
             num_channels: (int) The number of channels in the experiment.
             time_point_id: (str) The time point identifier used in file names.
             num_time_points: (int) The number of time points in the experiment.
+            segment_channel: (int) The channel to use for segmentation. Default is None.
             field_leading_zero: (bool) Whether the field of view identifier has a leading zero.
         Outputs:
             None
@@ -66,8 +69,9 @@ class NanoExperiment:
         self._channel_id = channel_id
         self._num_channels = num_channels
         self._time_point_id = time_point_id
+        self._segment_channel = segment_channel
         self._num_time_points = num_time_points
-        self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
+        self.structure = print(f'Experiment Structure /n segment_channel: {self._segment_channel} /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
                                channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
                                time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
         self.field_leading_zero = field_leading_zero
@@ -82,7 +86,8 @@ class NanoExperiment:
                   channel_id,
                   num_channels,
                   time_point_id,
-                  num_time_points) -> None:
+                  num_time_points,
+                  segment_channel) -> None:
         '''
         Set the structure of the experiment.
         '''
@@ -92,11 +97,12 @@ class NanoExperiment:
         self._num_channels = num_channels
         self._time_point_id = time_point_id
         self._num_time_points = num_time_points
+        self._segment_channel = segment_channel
         self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
                                channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
                                time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
 
-    def segment_and_crop(self, output_directory: str = None, 
+    def segment_and_crop(self, model_path: str = None, model_type: str = 'vit_h', output_directory: str = None, 
                             png: bool =False) -> None:
         '''
         Segment and crop the images in the experiment.
@@ -116,6 +122,11 @@ class NanoExperiment:
                         image_time_point_id_1_well_id_0.tif
                         ...
         Inputs:
+            model_path: (str) The path to the model checkpoint. This must be downloaded
+                from Meta on a user's local machine. Checkpoints can be downloaded from \
+                https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
+            model_type (str, optional): Specify the sam model type to load.
+                Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
             output_directory: (str) The path to the output directory. This will house
                 subdirectories for the ROIs and cropped images.
             png: (bool) Whether PNG images exist in the experiment directory. If True,
@@ -126,29 +137,34 @@ class NanoExperiment:
                 the directory extension 'png.' For example, '/experiment_path/field_id_0_channel_id_0_png/'.
             
         '''
+        assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified for segmentation. \
+            Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
         roi_path = output_directory + '/ROI'
         image_path = output_directory + '/cropped_images'
-        convert_png = False
         if not os.path.exists(roi_path):
             os.makedirs(roi_path)
         if not os.path.exists(image_path):
             os.makedirs(image_path)
-        # Get path to image
-        for c in range(self._num_channels):
-            channel_str = str(c)
-            for f in range(self._num_fields):
-                if self.field_leading_zero and f < 10:
-                    field_str = '0' + str(f)
-                else:
-                    field_str = str(f)
-                image_directory_path = f'{self._experiment_path}/{field_str}{channel_str}'
-                if png:
-                    image_directory_path = image_directory_path + '_png'
-                else:
-                    convert_png = True
-                for i in os.listdir(image_directory_path):
-                    if convert_png:
-                        ac.convert_tif_to_png(image_directory_path)
+        # Get path to image for segmentation
+        channel_str = str(self._segment_channel)
+        for f in range(self._num_fields):
+            if self.field_leading_zero and f < 10:
+                field_str = '0' + str(f)
+            else:
+                field_str = str(f)
+            tif_image_directory_path = f'{self._experiment_path}/{field_str}{channel_str}'
+            if not png: # Convert TIF to PNG
+                convert_tif_to_png(tif_image_directory_path)
+            png_image_directory_path = tif_image_directory_path + '_png'
+            # Segment images
+            for i in os.listdir(png_image_directory_path):
+                if i == 0:
+                    segmentation = ac.SamSegmenter(model_path=model_path, 
+                                                   model_type=model_type, 
+                                                   image_path=png_image_directory_path + '/' + i,
+                                                   tif_path=tif_image_directory_path + '/' + i.rstrip('.png') + '.TIF')
+
+
             
          
 
