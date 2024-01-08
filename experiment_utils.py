@@ -33,7 +33,8 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
             im = im.convert("L")
 
             # Rename file
-            file_name = str(f).rstrip(".TIF")
+            file_name = str(f.replace(' ', '')).rstrip(".TIF")
+            print(file_name)
             new_name = f'{png_path}/{file_name}'
             print(new_name)
             im.save(new_name + '.png', 'PNG')
