@@ -15,7 +15,7 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
             If None, a new directory will be created at the same level as the
             tif_path directory, with '_png' appended to the name.
     Outputs:
-        None
+        png_path: (str) The path to a directory of .png images.
     '''
     files = os.listdir(tif_path)
     total = len(files)
@@ -38,4 +38,4 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
             new_name = f'{png_path}/{file_name}'
             print(new_name)
             im.save(new_name + '.png', 'PNG')
-    return None
+    return png_path

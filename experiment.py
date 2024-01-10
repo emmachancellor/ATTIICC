@@ -72,9 +72,18 @@ class NanoExperiment:
         self._segment_channel = segment_channel
         self._num_time_points = num_time_points
         self.structure = print(f'Experiment Structure /n segment_channel: {self._segment_channel} /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
+                               field_leading_zero: {self._field_leading_zero} /n
                                channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
                                time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
-        self.field_leading_zero = field_leading_zero
+        self._field_leading_zero = field_leading_zero
+
+    @property
+    def field_leading_zero(self) -> bool:
+        return self._field_leading_zero
+    
+    @field_leading_zero.setter
+    def field_leading_zero(self, field_leading_zero) -> None:
+        self._field_leading_zero = field_leading_zero
 
     @property
     def structure(self) -> str:
@@ -98,16 +107,17 @@ class NanoExperiment:
         self._time_point_id = time_point_id
         self._num_time_points = num_time_points
         self._segment_channel = segment_channel
-        self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \ 
+        self.structure = print(f'Experiment Structure /n field_id: {self.field_id} /n field_num: {self.num_fields} /n \
+                               field_leading_zero: {self._field_leading_zero} /n 
                                channel_id: {self.channel_id} /n channel_num: {self.num_channels} /n \ 
                                time_point_id: {self.time_point_id} /n time_point_num: {self.num_time_points}')
 
     def segment_and_crop(self, model_path: str = None, model_type: str = 'vit_h', output_directory: str = None, 
-                            png: bool =False) -> None:
+                            convert_png: bool = False) -> None:
         '''
         Segment and crop the images in the experiment.
         Takes in images that are ordered by the experiment structure, then
-        segments and cross the images well-wise. The cropped images and their
+        segments and crops the images well-wise. The cropped images and their
         ROIs will be saved in individual directories for each well. The structure
         of the output directory will be:
             output_directory/
@@ -116,11 +126,24 @@ class NanoExperiment:
                         image_time_point_id_0_well_id_0.roi
                         image_time_point_id_1_well_id_0.roi
                         ...
-                images/
+                cropped_images/
                     field_id_0_channel_id_0_well_id_0/
-                        image_time_point_id_0_well_id_0.tif
+                        image_time_point_id_0_well_id_0.tif 
                         image_time_point_id_1_well_id_0.tif
                         ...
+        The path to tif images must be named as /field_idfield_numchannel_idchannel_num
+        
+        Example: 
+            field_id = 'f'
+            field_num = 0
+            channel_id = 'd'
+            channel_num = 3
+            field_leading_zero = True
+            Path to TIF images: experiment_path/f00d3
+
+        Note: if the field_id has a leading zero, the 'field_leading_zero' parameter in the SamSegmenter 
+            instance must be set to True.
+
         Inputs:
             model_path: (str) The path to the model checkpoint. This must be downloaded
                 from Meta on a user's local machine. Checkpoints can be downloaded from \
@@ -129,33 +152,32 @@ class NanoExperiment:
                 Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
             output_directory: (str) The path to the output directory. This will house
                 subdirectories for the ROIs and cropped images.
-            png: (bool) Whether PNG images exist in the experiment directory. If True,
-                the PNG existing PNG images will be used for segmentation. If False,
-                the TIF images will be converted to PNG and saved in a new directory.
+            convert_png: (bool) If True, the TIF images will be converted to PNG and saved in a new directory.
                 These images will be used for segmentation. If PNG images exist,
                 the directory must follow the same structure as the TIF directory, with 
                 the directory extension 'png.' For example, '/experiment_path/field_id_0_channel_id_0_png/'.
+                Default is False.
             
         '''
         assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified for segmentation. \
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
         roi_path = output_directory + '/ROI'
-        image_path = output_directory + '/cropped_images'
+        cropped_image_path = output_directory + '/cropped_images'
         if not os.path.exists(roi_path):
             os.makedirs(roi_path)
-        if not os.path.exists(image_path):
-            os.makedirs(image_path)
+        if not os.path.exists(cropped_image_path):
+            os.makedirs(cropped_image_path)
         # Get path to image for segmentation
         channel_str = str(self._segment_channel)
         for f in range(self._num_fields):
-            if self.field_leading_zero and f < 10:
+            if self._field_leading_zero and f < 10:
                 field_str = '0' + str(f)
             else:
                 field_str = str(f)
             tif_image_directory_path = f'{self._experiment_path}/{field_str}{channel_str}'
-            if not png: # Convert TIF to PNG
-                convert_tif_to_png(tif_image_directory_path)
-            png_image_directory_path = tif_image_directory_path + '_png'
+            # Do this if we can't find PNGs, but look for them first and don't require a PNG bool
+            if convert_png:
+                png_image_directory_path = convert_tif_to_png(tif_image_directory_path)
             # Segment images
             for i, j in enumerate(os.listdir(png_image_directory_path)):
                 image_path=png_image_directory_path + '/' + j
