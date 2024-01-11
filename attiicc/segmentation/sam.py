@@ -249,7 +249,7 @@ class SamSegmenter:
                 in order by the y-coordinate of the centroid. The first list contains ROIs
                 and the second list contains lists of the box coordinates in XYWH format.
         '''
-        image_name = os.path.basename(self.image_path).rstrip(".png")
+        image_name = os.path.basename(self._image_path).rstrip(".png")
         seg_num = 1
         centroid_list = []
         duplicate_list = []
