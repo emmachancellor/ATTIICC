@@ -203,18 +203,26 @@ class NanoExperiment:
                 if i == 0: # Initialize SamSegmenter instance
                     segmentation = ac.SamSegmenter(model_path=model_path, 
                                                     model_type=model_type, 
-                                                    image_path=png_path,
+                                                    png_path=png_path,
                                                     tif_path=tif_path)
                 else: # If SamSegmenter instance already exists, update the image path, don't need to re-load SAM model
                     segmentation.update_image(png_path, tif_path)
                 roi, box = segmentation.generate_rois()
                 # Save ROIs and boxes in dictionary for each well
                 for result_index in range(len(roi)):
-                    well_name = f'{self._time_point_id}{time_point_str}_{self._field_id}{field_str}_well{i}'
-                    if i == 0:
-                        well_dict[well_name] = [[roi][result_index], [box][result_index]]
+                    well_name = f'{field_str}_well{result_index}'
+                    time_point_index = png_path.find(self._time_point_id)
+                    if time_point_index != -1:
+                        if self.time_point_leading_zero:
+                            time_point = png_path[time_point_index:time_point_index + 3]
+                        else:
+                            time_point = png_path[time_point_index:time_point_index + 2]
+                    if well_name not in well_dict:
+                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [time_point]]
                     else:
-                        well_dict[well_name] = [well_dict[well_name][0] + [roi][result_index], well_dict[well_name][1] + [box][result_index]]
+                        well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
+                                                well_dict[well_name][1] + [box[result_index]], 
+                                                well_dict[well_name][2] + [time_point]]
         return well_dict
             
 
