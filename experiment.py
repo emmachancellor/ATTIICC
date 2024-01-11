@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import attiicc as ac
+from sam import SamSegmenter
 from experiment_utils import convert_tif_to_png
 
 class NanoExperiment:
