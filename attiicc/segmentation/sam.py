@@ -225,7 +225,8 @@ class SamSegmenter:
         return
 
     def filter_duplicate_masks(self, centroid_list_sorted, 
-                               filter_distance, 
+                               filter_distance,
+                               roi_path = None, 
                                save_heatmap = False,
                                validation_path = None) -> list:
         '''
@@ -241,26 +242,30 @@ class SamSegmenter:
             centroid_list_sorted (list): The filtered list of lists containing the centroid coordinates \
                 and the ROI. The list is sorted by the y-coordinate of the centroid.
         '''
-        remove_coords = []
-        do_not_remove_coords = []
-        matrix_coordinates = list(zip(centroid_list_sorted[0], centroid_list_sorted[1]))
+        remove_coords = set()
+        do_not_remove_coords = set()
+        matrix_coordinates = cp.array(centroid_list_sorted)
+        #matrix_coordinates = cp.array(list(zip(centroid_list_sorted[0], centroid_list_sorted[1])))
         difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
         sq_difference = cp.square(difference)
         distance_matrix = cp.sqrt(cp.sum(sq_difference, axis=2))
-        mask = distance_matrix > filter_distance
+        mask = distance_matrix <= filter_distance
         indices = cp.nonzero(mask)
         indices_np = [cp.asnumpy(idx) for idx in indices]
         for i, j in zip(indices_np[0], indices_np[1]):
-            if i not in remove_coords and i not in do_not_remove_coords:
-                print("Duplicate Value 1:", centroid_list_sorted[i], "Duplicate Value 2:", centroid_list_sorted[j])
-                remove_coords.append(i)
-                do_not_remove_coords.append(j)
-        centroid_list_sorted = [x for x in centroid_list_sorted if x not in remove_coords]
+            if i < j and i not in do_not_remove_coords and j not in remove_coords:
+                remove_coords.add(i)
+                do_not_remove_coords.add(j)
+
+        # Removing coordinates from the original list
+        centroid_list_filtered = [x for i, x in enumerate(centroid_list_sorted) if i not in remove_coords]
+        print("Coordinates to remove: ", remove_coords)
+
 
         if save_heatmap:
-            sns.set_style('dark')
             plt.figure(figsize=(8, 6))
-            sns.heatmap(distance_matrix, cmap='viridis')
+            plt.imshow(distance_matrix.get(), cmap='viridis')
+            plt.colorbar(label='Distance')
             plt.title('Centroid Distance Heatmap')
             plt.xlabel('Centroid Index')
             plt.ylabel('Centroid Index')
@@ -268,14 +273,15 @@ class SamSegmenter:
             plt.savefig('heatmap.png')
             if validation_path is None:
                 image_name = os.path.basename(self._png_path).rstrip(".png")
-                validation_dir = os.path.join(self._roi_path, "validation_plots")
+                validation_dir = os.path.join(roi_path, "validation_plots")
                 if not os.path.exists(validation_dir):
                     print("Making directory at: ", validation_dir)
                     os.makedirs(validation_dir)
-                plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
+                plt.savefig(os.path.join(validation_dir, f"{image_name}_heatmap.png"))
             else:
-                plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
-        return centroid_list_sorted
+                plt.savefig(os.path.join(validation_dir, f"{image_name}_heatmap.png"))
+            print("Heatmap saved to: ", f'{validation_dir}/{image_name}_heatmap.png')
+        return centroid_list_filtered
 
 
     def generate_rois(self, target_area=[11100,12000],
@@ -328,15 +334,16 @@ class SamSegmenter:
         print("Filtering for duplicates...")
         filtered_coordinates = self.filter_duplicate_masks(centroid_list_sorted,
                                     filter_distance=filter_distance,
+                                    roi_path=roi_path,
                                     save_heatmap=save_heatmap,
                                     validation_path=validation_path)
-        print("Total number of ROIs: ", len(centroid_list_sorted))
+        print("Total number of ROIs: ", len(filtered_coordinates))
         # Sort the list by y-coordinate
         filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
         print("Filtered Coordinates: ", filtered_coordinates)
         for i in filtered_coordinates:
-            roi_list.append(coordinate_dict[i][0])
-            box_list.append(coordinate_dict[i][2])
+            roi_list.append(coordinate_dict[tuple(i)][0])
+            box_list.append(coordinate_dict[tuple(i)][2])
         roi_and_box_list = [roi_list, box_list]
         if roi_path is not None:
             print("Saving ROIs to: ", roi_path+'/'+image_name)
@@ -344,8 +351,8 @@ class SamSegmenter:
             if not os.path.exists(new_path):
                 print("Making directory at: ", new_path)
                 os.makedirs(new_path)
-            for i, j in enumerate(centroid_list_sorted):
-                roi = j[2]
+            for i, j in enumerate(filtered_coordinates):
+                roi = coordinate_dict[tuple(j)][0]
                 roi_name = f"{image_name}_ROI_{i+1}.roi"
                 roi.tofile(os.path.join(new_path, roi_name))
             print(f"ROIs saved for {image_name}")
@@ -359,13 +366,14 @@ class SamSegmenter:
             if validation_plot:
                 # Load image
                 img = mpimg.imread(self._png_path)
-                plt.imshow(img)
+                print("Generating Validation Plot: ", self._png_path)
+                plt.imshow(img, cmap='gray')
                 # Create a scatter plot of the centroids
                 plt.scatter(*zip(*filtered_coordinates), color='yellow', marker='o')
                 plt.title(f"Centroids for {image_name}")
                 # Annotate each point with its label
                 for (x, y), i in zip(filtered_coordinates, range(len(filtered_coordinates))):
-                    plt.text(x, y, str(i))
+                    plt.text(x, y, str(i), color='white')
                 if validation_path is None:
                     validation_dir = os.path.join(roi_path, "validation_plots")
                     if not os.path.exists(validation_dir):
