@@ -206,7 +206,7 @@ class NanoExperiment:
                                                     image_path=png_path,
                                                     tif_path=tif_path)
                 else: # If SamSegmenter instance already exists, update the image path, don't need to re-load SAM model
-                    segmentation.image_path = (png_path, tif_path)
+                    segmentation.update_image(png_path, tif_path)
                 roi, box = segmentation.generate_rois()
                 # Save ROIs and boxes in dictionary for each well
                 for result_index in range(len(roi)):

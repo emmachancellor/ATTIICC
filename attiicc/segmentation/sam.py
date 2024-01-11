@@ -20,7 +20,7 @@ class SamSegmenter:
         self,
         model_path: str = None,
         model_type: str = "vit_h",
-        image_path: str = None,
+        png_path: str = None,
         tif_path: str = None
     ) -> None:
         '''
@@ -31,7 +31,7 @@ class SamSegmenter:
                 https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
             model_type (str, optional): Specify the sam model type to load.
             Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
-            image_path (str, optional): The path to the image to segment. 
+            png_path (str, optional): The path to the image to segment. 
             Default is None.
             tif_path (str, optional): The path to the tif image to crop with 
                 the ROIs. Default is None.
@@ -42,8 +42,8 @@ class SamSegmenter:
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
         self.model_path = model_path
         self.model_type = model_type
-        self._image_path = image_path
-        self.tif_path = tif_path
+        self._png_path = png_path
+        self._tif_path = tif_path
         self._sam_result = None
         self.img_bgr = None
         self.sam = None
@@ -55,9 +55,9 @@ class SamSegmenter:
         self.stability_score = None
         self.crop_box = None
 
-        if image_path is not None:
+        if png_path is not None:
             self.sam = self._load_sam_model(model_type=model_type)
-            self._sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
+            self._sam_result, self.img_bgr = self._segment_image(self.sam, self._png_path)
         if self._sam_result is not None:
             self.segmentation = [mask["segmentation"] for mask in self._sam_result]
             self.area = [mask["area"] for mask in self._sam_result]
@@ -67,18 +67,14 @@ class SamSegmenter:
             self.stability_score = [mask["stability_score"] for mask in self._sam_result]
             self.crop_box = [mask["crop_box"] for mask in self._sam_result]
     
-    @property
-    def image_path(self) -> str:
-        return self._image_path, self.tif_path
-    
-    @image_path.setter
-    def image_path(self, img_paths) -> None:
+    def update_image(self, png_path, tif_path) -> None:
         '''
         Update the image path and recalculate the segmentation results 
         without re-loading the SAM model. 
         '''
-        self._image_path, self._tif_path = img_paths
-        self._sam_result, self.img_bgr = self._segment_image(self.sam, self._image_path)
+        self._png_path = png_path
+        self._tif_path = tif_path
+        self._sam_result, self.img_bgr = self._segment_image(self.sam, self._png_path)
         self.segmentation = [mask["segmentation"] for mask in self._sam_result]
         self.area = [mask["area"] for mask in self._sam_result]
         self.bbox = [mask["bbox"] for mask in self._sam_result]
@@ -86,13 +82,14 @@ class SamSegmenter:
         self.point_coords = [mask["point_coords"] for mask in self._sam_result]
         self.stability_score = [mask["stability_score"] for mask in self._sam_result]
         self.crop_box = [mask["crop_box"] for mask in self._sam_result]
+        return
 
     @property
     def sam_result(self) -> Dict:
         return self._sam_result
     
     @sam_result.setter
-    def sam_result(self, target_area=[11500,13600]) -> None:
+    def sam_result(self, target_area=[11100,12000]) -> None:
         '''
         Filter the SAM results by area.
         Inputs:
@@ -133,12 +130,12 @@ class SamSegmenter:
         return sam
 
 
-    def _segment_image(self, sam, image_path) -> Tuple[Dict, np.ndarray]:
+    def _segment_image(self, sam, png_path) -> Tuple[Dict, np.ndarray]:
         '''
         Segments an image using a pretrained SAM model.
         Inputs:
             sam (Sam): The loaded SAM model.
-            image_path (str): The path to the image to segment.
+            png_path (str): The path to the image to segment.
         Outputs:
             sam_result (dict): The segmentation results. Contains: 
                 `segmentation` : the mask 
@@ -150,7 +147,8 @@ class SamSegmenter:
                 `crop_box` : the crop of the image used to generate this mask in XYWH format
         '''
         mask_generator = sa.SamAutomaticMaskGenerator(sam)
-        image_bgr = cv2.imread(image_path) # cv2 reads in BGR format
+        image_bgr = cv2.imread(png_path) # cv2 reads in BGR format
+        print("PNG Path: ", png_path)
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
         sam_result = mask_generator.generate(image_rgb)
         return sam_result, image_bgr
@@ -174,11 +172,11 @@ class SamSegmenter:
 
         # Plot the images onto the axes
         axs[0].imshow(self.img_bgr)
-        axs[0].set_title('source image')
+        axs[0].set_title(titles[0])
         axs[0].axis('off')
 
         axs[1].imshow(annotated_image)
-        axs[1].set_title('segmented image')
+        axs[1].set_title(titles[1])
         axs[1].axis('off')
 
         if save:
@@ -228,7 +226,7 @@ class SamSegmenter:
                 plt.savefig(save_path)    
         return
 
-    def generate_rois(self, target_area=[11500,13600],
+    def generate_rois(self, target_area=[11100,12000],
                             similarity_filter=10,
                             roi_path=None,
                             roi_archive=True,
@@ -249,13 +247,12 @@ class SamSegmenter:
                 in order by the y-coordinate of the centroid. The first list contains ROIs
                 and the second list contains lists of the box coordinates in XYWH format.
         '''
-        image_name = os.path.basename(self._image_path).rstrip(".png")
+        image_name = os.path.basename(self._png_path).rstrip(".png")
         seg_num = 1
         centroid_list = []
         duplicate_list = []
         roi_list = []
         box_list = []
-        self.sam_result = target_area
         for seg, box in zip(self.segmentation, self.bbox):
             binary_image = np.uint8(seg) * 255
             contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
