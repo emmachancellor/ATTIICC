@@ -225,6 +225,7 @@ class SamSegmenter:
         return
 
     def filter_duplicate_masks(self, centroid_list_sorted, 
+                               coordinate_dict, 
                                filter_distance,
                                roi_path = None, 
                                save_heatmap = False,
@@ -244,8 +245,8 @@ class SamSegmenter:
         '''
         remove_coords = set()
         do_not_remove_coords = set()
+        seg_num_set = set()
         matrix_coordinates = cp.array(centroid_list_sorted)
-        #matrix_coordinates = cp.array(list(zip(centroid_list_sorted[0], centroid_list_sorted[1])))
         difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
         sq_difference = cp.square(difference)
         distance_matrix = cp.sqrt(cp.sum(sq_difference, axis=2))
@@ -253,12 +254,21 @@ class SamSegmenter:
         indices = cp.nonzero(mask)
         indices_np = [cp.asnumpy(idx) for idx in indices]
         for i, j in zip(indices_np[0], indices_np[1]):
+            seg_num_i = coordinate_dict[tuple(centroid_list_sorted[i])][1]
+            seg_num_j = coordinate_dict[tuple(centroid_list_sorted[j])][1]
             if i < j and i not in do_not_remove_coords and j not in remove_coords:
                 remove_coords.add(i)
+                seg_num_set.add(coordinate_dict[tuple(centroid_list_sorted[i])][1])
                 do_not_remove_coords.add(j)
-
+            #TODO: Need to check for duplicate ROIs in the same nanowell
+            elif seg_num_i == seg_num_j and seg_num_i in seg_num_set:
+                print("Duplicate ROI found: ", i, j)
+                remove_coords.add(i)
+                seg_num_set.add(coordinate_dict[tuple(centroid_list_sorted[i])][1])
+                do_not_remove_coords.add(j) 
         # Removing coordinates from the original list
         centroid_list_filtered = [x for i, x in enumerate(centroid_list_sorted) if i not in remove_coords]
+        print(centroid_list_filtered)
         print("Coordinates to remove: ", remove_coords)
 
 
@@ -333,10 +343,11 @@ class SamSegmenter:
         # Remove duplicates
         print("Filtering for duplicates...")
         filtered_coordinates = self.filter_duplicate_masks(centroid_list_sorted,
-                                    filter_distance=filter_distance,
-                                    roi_path=roi_path,
-                                    save_heatmap=save_heatmap,
-                                    validation_path=validation_path)
+                                            coordinate_dict,
+                                            filter_distance=filter_distance,
+                                            roi_path=roi_path,
+                                            save_heatmap=save_heatmap,
+                                            validation_path=validation_path)
         print("Total number of ROIs: ", len(filtered_coordinates))
         # Sort the list by y-coordinate
         filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
