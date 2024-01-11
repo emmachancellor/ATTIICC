@@ -181,9 +181,9 @@ class NanoExperiment:
         # Locate and/or create PNG images needed for segmentation from brightfield images
         for f in range(self._num_fields):
             if self._field_leading_zero and f < 10:
-                field_str = '0' + str(f)
+                field_str = self._field_id + '0' + str(f)
             else:
-                field_str = str(f)
+                field_str = self._field_id + str(f)
             tif_image_directory_path = f'{self._experiment_path}/{field_str}{channel_str}'
             if convert_png:
                 png_image_directory_path = convert_tif_to_png(tif_image_directory_path)
