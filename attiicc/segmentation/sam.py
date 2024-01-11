@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import zipfile
 import cupy as cp
+import attiicc as ac
+import seaborn as sns
 from typing import Dict, Tuple
 from roifile import ImagejRoi
-import attiicc as ac
 from attiicc import segment_anything as sa
 
 class SamSegmenter:
@@ -223,13 +224,48 @@ class SamSegmenter:
                 plt.savefig(save_path)    
         return
 
-    def filter_duplicate_masks(self, centroid_list_sorted, filter_distance, save_heatmap = False) -> list:
+    def filter_duplicate_masks(self, centroid_list_sorted, 
+                               filter_distance, 
+                               save_heatmap = False,
+                               validation_path = None) -> list:
+        '''
+        Filter duplicate ROIs based on the distance between the centroids.
+        Inputs:
+            centroid_list_sorted (list): A list of lists containing the centroid coordinates \
+                and the ROI. The list is sorted by the y-coordinate of the centroid.
+            filter_distance (int): The distance to use for filtering. ROIs with centroids \
+                within this distance will be filtered out.
+            save_heatmap (bool, optional): Whether to save the heatmap. Default is False.
+            validation_path (str, optional): The path to save the validation plot. Default is None.
+        Outputs:
+            centroid_list_sorted (list): The filtered list of lists containing the centroid coordinates \
+                and the ROI. The list is sorted by the y-coordinate of the centroid.
+        '''
         matrix_coordinates = list(zip(centroid_list_sorted[0], centroid_list_sorted[1]))
         difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
         sq_difference = cp.square(difference)
         distance_matrix = cp.sqrt(cp.sum(sq_difference, axis=2))
         mask = distance_matrix > filter_distance
         indices = cp.nonzero(mask)
+        
+        if save_heatmap:
+            sns.set_style('dark')
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(distance_matrix, cmap='viridis')
+            plt.title('Centroid Distance Heatmap')
+            plt.xlabel('Centroid Index')
+            plt.ylabel('Centroid Index')
+            plt.show()
+            plt.savefig('heatmap.png')
+            if validation_path is None:
+                image_name = os.path.basename(self._png_path).rstrip(".png")
+                validation_dir = os.path.join(self._roi_path, "validation_plots")
+                if not os.path.exists(validation_dir):
+                    print("Making directory at: ", validation_dir)
+                    os.makedirs(validation_dir)
+                plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
+            else:
+                plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
 
 
     def generate_rois(self, target_area=[11100,12000],
