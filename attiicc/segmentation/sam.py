@@ -4,7 +4,9 @@ import cv2
 import os
 import supervision as sv
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import zipfile
+import cupy as cp
 from typing import Dict, Tuple
 from roifile import ImagejRoi
 import attiicc as ac
@@ -67,7 +69,7 @@ class SamSegmenter:
             self.stability_score = [mask["stability_score"] for mask in self._sam_result]
             self.crop_box = [mask["crop_box"] for mask in self._sam_result]
     
-    def update_image(self, png_path, tif_path) -> None:
+    def update_image(self, png_path: str, tif_path: str) -> None:
         '''
         Update the image path and recalculate the segmentation results 
         without re-loading the SAM model. 
@@ -83,13 +85,8 @@ class SamSegmenter:
         self.stability_score = [mask["stability_score"] for mask in self._sam_result]
         self.crop_box = [mask["crop_box"] for mask in self._sam_result]
         return
-
-    @property
-    def sam_result(self) -> Dict:
-        return self._sam_result
     
-    @sam_result.setter
-    def sam_result(self, target_area=[11100,12000]) -> None:
+    def sam_area_filter(self, target_area=[11100,12000]) -> None:
         '''
         Filter the SAM results by area.
         Inputs:
@@ -226,8 +223,18 @@ class SamSegmenter:
                 plt.savefig(save_path)    
         return
 
+    def filter_duplicate_masks(self, centroid_list_sorted, filter_distance, save_heatmap = False) -> list:
+        matrix_coordinates = list(zip(centroid_list_sorted[0], centroid_list_sorted[1]))
+        difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
+        sq_difference = cp.square(difference)
+        distance_matrix = cp.sqrt(cp.sum(sq_difference, axis=2))
+        mask = distance_matrix > filter_distance
+        indices = cp.nonzero(mask)
+
+
     def generate_rois(self, target_area=[11100,12000],
                             similarity_filter=10,
+                            outlier_filter=200,
                             roi_path=None,
                             roi_archive=True,
                             validation_plot=False,
@@ -271,17 +278,30 @@ class SamSegmenter:
         # Sort the list of lists by the value at index 0
         centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
         # Remove duplicates
-        for i in range(len(centroid_list_sorted) - 1):
-            x, y, roi, seg_num, box = centroid_list_sorted[i]
-            x_next, y_next, roi, seg_num, box = centroid_list_sorted[i + 1]
-            if abs(x - x_next) < similarity_filter and abs(y - y_next) < similarity_filter:
-                duplicate_list.append(centroid_list_sorted[i])
-                print("Duplicate Value 1:", (x, y), "Duplicate Value 2:", (x_next, y_next))
-        centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
-        print("Total number of ROIs: ", len(centroid_list_sorted))
-        y_centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
-        for i in y_centroid_list_sorted:
-            # print(y_centroid_list_sorted[2])
+        #TODO: Calculate a distance matrix and filter based on the matrix distances
+        print("Filtering for duplicates...")
+        duplicate_count = 1
+        while duplicate_count > 0:
+            duplicate_count -= 1
+            for i in range(len(centroid_list_sorted) - 1):
+                duplicate = False
+                x, y, roi, seg_num, box = centroid_list_sorted[i]
+                x_next, y_next, roi, seg_num, box = centroid_list_sorted[i + 1]
+                print("Outlier Test: ", abs(y - y_next))
+                if abs(x - x_next) < similarity_filter and abs(y - y_next) < similarity_filter:
+                    duplicate_list.append(centroid_list_sorted[i])
+                    duplicate = True
+                if abs(x - x_next) > outlier_filter:
+                    duplicate_list.append(centroid_list_sorted[i])
+                    duplicate = True
+                if duplicate:
+                    duplicate_count += 1
+                    print("Duplicate Value 1:", (x, y), "Duplicate Value 2:", (x_next, y_next))
+            centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
+            print("Total number of ROIs: ", len(centroid_list_sorted))
+        # Sort the list by y-coordinate
+        centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
+        for i in centroid_list_sorted:
             roi_list.append(i[2])
             box_list.append(i[4])
         roi_and_box_list = [roi_list, box_list]
@@ -304,10 +324,13 @@ class SamSegmenter:
                             zipf.write(os.path.join(root, file), file)
                 print(f"ROIs archived for {image_name}")
             if validation_plot:
-                centroids = [(x, y) for x, y, roi, seg_num, box in y_centroid_list_sorted]
-                seg_num = [seg_num for x, y, roi, seg_num, box in y_centroid_list_sorted]
+                centroids = [(x, y) for x, y, roi, seg_num, box in centroid_list_sorted]
+                seg_num = [seg_num for x, y, roi, seg_num, box in centroid_list_sorted]
+                # Load image
+                img = mpimg.imread(self._png_path)
+                plt.imshow(img)
                 # Create a scatter plot of the centroids
-                plt.scatter(*zip(*centroids), marker='o')
+                plt.scatter(*zip(*centroids), color='yellow', marker='o')
                 plt.title(f"Centroids for {image_name}")
                 # Annotate each point with its label
                 for (x, y), i in zip(centroids, range(len(centroids))):
