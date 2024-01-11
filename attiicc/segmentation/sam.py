@@ -233,7 +233,7 @@ class SamSegmenter:
         Inputs:
             centroid_list_sorted (list): A list of lists containing the centroid coordinates \
                 and the ROI. The list is sorted by the y-coordinate of the centroid.
-            filter_distance (int): The distance to use for filtering. ROIs with centroids \
+            filter_distance (int): The pixel distance to use for filtering. ROIs with centroids \
                 within this distance will be filtered out.
             save_heatmap (bool, optional): Whether to save the heatmap. Default is False.
             validation_path (str, optional): The path to save the validation plot. Default is None.
@@ -241,13 +241,22 @@ class SamSegmenter:
             centroid_list_sorted (list): The filtered list of lists containing the centroid coordinates \
                 and the ROI. The list is sorted by the y-coordinate of the centroid.
         '''
+        remove_coords = []
+        do_not_remove_coords = []
         matrix_coordinates = list(zip(centroid_list_sorted[0], centroid_list_sorted[1]))
         difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
         sq_difference = cp.square(difference)
         distance_matrix = cp.sqrt(cp.sum(sq_difference, axis=2))
         mask = distance_matrix > filter_distance
         indices = cp.nonzero(mask)
-        
+        indices_np = [cp.asnumpy(idx) for idx in indices]
+        for i, j in zip(indices_np[0], indices_np[1]):
+            if i not in remove_coords and i not in do_not_remove_coords:
+                print("Duplicate Value 1:", centroid_list_sorted[i], "Duplicate Value 2:", centroid_list_sorted[j])
+                remove_coords.append(i)
+                do_not_remove_coords.append(j)
+        centroid_list_sorted = [x for x in centroid_list_sorted if x not in remove_coords]
+
         if save_heatmap:
             sns.set_style('dark')
             plt.figure(figsize=(8, 6))
@@ -266,20 +275,21 @@ class SamSegmenter:
                 plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
             else:
                 plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
+        return centroid_list_sorted
 
 
     def generate_rois(self, target_area=[11100,12000],
-                            similarity_filter=10,
-                            outlier_filter=200,
+                            filter_distance=10,
                             roi_path=None,
                             roi_archive=True,
                             validation_plot=False,
-                            validation_path=None):
+                            validation_path=None,
+                            save_heatmap=False):
         '''
         Generate ROIs from the segmentation results.
         Inputs:
             target_area (int, optional): The target area of the ROI. Default is 11500.
-            similarity_filter (int, optional): When filtering for duplicate ROIs
+            filter_distance (int, optional): When filtering for duplicate ROIs
                 this method will search for ROI centroids that are within +/-
                 a number of pixels (similarity_filter). Default is 10 pixels.
             roi_path (str, optional): The path to a directory where ROIs can be saved. Default is None.    
@@ -293,9 +303,9 @@ class SamSegmenter:
         image_name = os.path.basename(self._png_path).rstrip(".png")
         seg_num = 1
         centroid_list = []
-        duplicate_list = []
         roi_list = []
         box_list = []
+        coordinate_dict = {}
         for seg, box in zip(self.segmentation, self.bbox):
             binary_image = np.uint8(seg) * 255
             contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -308,38 +318,25 @@ class SamSegmenter:
                     if M["m00"] != 0: # calculate the centroid to allow filtering of duplicate nanowells
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
-                        coords_id = [cX, cY, roi, seg_num, box]
+                        coords_id = [cX, cY]
+                        coordinate_dict[(cX, cY)] = [roi, seg_num, box]
                         centroid_list.append(coords_id)
             seg_num += 1
         # Sort the list of lists by the value at index 0
         centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
         # Remove duplicates
-        #TODO: Calculate a distance matrix and filter based on the matrix distances
         print("Filtering for duplicates...")
-        duplicate_count = 1
-        while duplicate_count > 0:
-            duplicate_count -= 1
-            for i in range(len(centroid_list_sorted) - 1):
-                duplicate = False
-                x, y, roi, seg_num, box = centroid_list_sorted[i]
-                x_next, y_next, roi, seg_num, box = centroid_list_sorted[i + 1]
-                print("Outlier Test: ", abs(y - y_next))
-                if abs(x - x_next) < similarity_filter and abs(y - y_next) < similarity_filter:
-                    duplicate_list.append(centroid_list_sorted[i])
-                    duplicate = True
-                if abs(x - x_next) > outlier_filter:
-                    duplicate_list.append(centroid_list_sorted[i])
-                    duplicate = True
-                if duplicate:
-                    duplicate_count += 1
-                    print("Duplicate Value 1:", (x, y), "Duplicate Value 2:", (x_next, y_next))
-            centroid_list_sorted = [x for x in centroid_list_sorted if x not in duplicate_list]
-            print("Total number of ROIs: ", len(centroid_list_sorted))
+        filtered_coordinates = self.filter_duplicate_masks(centroid_list_sorted,
+                                    filter_distance=filter_distance,
+                                    save_heatmap=save_heatmap,
+                                    validation_path=validation_path)
+        print("Total number of ROIs: ", len(centroid_list_sorted))
         # Sort the list by y-coordinate
-        centroid_list_sorted = sorted(centroid_list_sorted, key=lambda x: x[1])
-        for i in centroid_list_sorted:
-            roi_list.append(i[2])
-            box_list.append(i[4])
+        filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
+        print("Filtered Coordinates: ", filtered_coordinates)
+        for i in filtered_coordinates:
+            roi_list.append(coordinate_dict[i][0])
+            box_list.append(coordinate_dict[i][2])
         roi_and_box_list = [roi_list, box_list]
         if roi_path is not None:
             print("Saving ROIs to: ", roi_path+'/'+image_name)
@@ -360,16 +357,14 @@ class SamSegmenter:
                             zipf.write(os.path.join(root, file), file)
                 print(f"ROIs archived for {image_name}")
             if validation_plot:
-                centroids = [(x, y) for x, y, roi, seg_num, box in centroid_list_sorted]
-                seg_num = [seg_num for x, y, roi, seg_num, box in centroid_list_sorted]
                 # Load image
                 img = mpimg.imread(self._png_path)
                 plt.imshow(img)
                 # Create a scatter plot of the centroids
-                plt.scatter(*zip(*centroids), color='yellow', marker='o')
+                plt.scatter(*zip(*filtered_coordinates), color='yellow', marker='o')
                 plt.title(f"Centroids for {image_name}")
                 # Annotate each point with its label
-                for (x, y), i in zip(centroids, range(len(centroids))):
+                for (x, y), i in zip(filtered_coordinates, range(len(filtered_coordinates))):
                     plt.text(x, y, str(i))
                 if validation_path is None:
                     validation_dir = os.path.join(roi_path, "validation_plots")
