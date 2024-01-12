@@ -56,8 +56,12 @@ class NanoExperiment(SamSegmenter):
             num_time_points: (int) The number of time points in the experiment.
             segment_channel: (int) The channel to use for segmentation. Default is None.
             field_leading_zero: (bool) Whether the field of view identifier has a leading zero.
-        Outputs:
-            None
+            **kwargs: Keyword arguments for SamSegmenter by method. 
+                generate_rois_params: (dict) Keyword arguments for SamSegmenter.generate_rois().
+                plot_segmented_image_params: (dict) Keyword arguments for SamSegmenter.plot_segmented_image().
+                plot_masks_params: (dict) Keyword arguments for SamSegmenter.plot_masks().
+                For all parameters, format should be: {'parameter_name': parameter_value}
+                Example: generate_rois_params = {'save_rois': True, 'save_directory': 'experiment_path/ROI'}
         '''
         assert isinstance(experiment_path, str), 'Experiment_path must be a string'
         assert isinstance(field_id, str), 'field_id must be a string specifying the field of view identifier, Ex. \'f\''
@@ -66,6 +70,7 @@ class NanoExperiment(SamSegmenter):
         assert isinstance(num_channels, int), 'num_channels must be an integer specifying the number of channels'
         assert isinstance(time_point_id, str), 'time_point_id must be a string specifying the time point identifier, Ex. \'t\''
         assert isinstance(num_time_points, int), 'num_time_points must be an integer specifying the number of time points'
+        super().__init__(**kwargs)
         self._experiment_path = experiment_path
         self._field_id = field_id
         self._num_fields = num_fields
@@ -86,6 +91,9 @@ class NanoExperiment(SamSegmenter):
             time_point_id: {self._time_point_id} \n\
             time_point_num: {self._num_time_points} \n\
             time_point_leading_zero: {self._time_point_leading_zero}'
+        self.generate_rois_params = kwargs.get('generate_rois_params', {})
+        self.plot_segmented_image_params = kwargs.get('plot_segmented_image_params', {})
+        self.plot_masks_params = kwargs.get('plot_masks_params', {})
     @property
     def field_leading_zero(self) -> bool:
         return self._field_leading_zero
@@ -102,17 +110,28 @@ class NanoExperiment(SamSegmenter):
     def time_point_leading_zero(self, time_point_leading_zero) -> None:
         self._time_point_leading_zero = time_point_leading_zero
     
-    def set_structure(self, field_id,
-                  num_fields,
-                  channel_id,
-                  num_channels,
-                  time_point_id,
-                  num_time_points,
-                  segment_channel,
-                  field_leading_zero,
-                  time_point_leading_zero) -> None:
+    def set_structure(self, 
+                      field_id: str,
+                      num_fields: int,
+                      channel_id: str,
+                      num_channels: int,
+                      time_point_id: str,
+                      num_time_points: int,
+                      segment_channel: int,
+                      field_leading_zero: bool,
+                      time_point_leading_zero: bool) -> None:
         '''
         Set the structure of the experiment.
+        Inputs:
+            field_id: (str) The field of view identifier used in direcotry names.
+            num_fields: (int) The number of fields of view in the experiment.
+            channel_id: (str) The channel identifier used in directory names.
+            num_channels: (int) The number of channels in the experiment.
+            time_point_id: (str) The time point identifier used in file names.
+            num_time_points: (int) The number of time points in the experiment.
+            segment_channel: (int) The channel to use for segmentation. Default is None.
+            field_leading_zero: (bool) Whether the field of view identifier has a leading zero.
+            time_point_leading_zero: (bool) Whether the time point identifier has a leading zero.
         '''
         self._field_id = field_id
         self._num_fields = num_fields
@@ -125,8 +144,11 @@ class NanoExperiment(SamSegmenter):
         self._time_point_leading_zero = time_point_leading_zero
         return print(self.structure)
 
-    def segment_nanowells(self, model_path: str = None, model_type: str = 'vit_h', output_directory: str = None, 
-                            convert_png: bool = False) -> None:
+    def segment_nanowells(self, 
+                          model_path: str = None, 
+                          model_type: str = 'vit_h', 
+                          output_directory: str = None, 
+                          convert_png: bool = False) -> None:
         '''
         Segment and crop the images in the experiment.
         Takes in images that are ordered by the experiment structure, then
@@ -174,7 +196,6 @@ class NanoExperiment(SamSegmenter):
             roi_path = self._experiment_path + '/ROI'
         else: 
             roi_path = output_directory + '/ROI'
-
         well_dict = {}
         if not os.path.exists(roi_path):
             os.makedirs(roi_path)
@@ -209,7 +230,7 @@ class NanoExperiment(SamSegmenter):
                                                     tif_path=tif_path)
                 else: # If SamSegmenter instance already exists, update the image path, don't need to re-load SAM model
                     segmentation.update_image(png_path, tif_path)
-                roi, box = segmentation.generate_rois()
+                roi, box = segmentation.generate_rois(**self.generate_rois_params)
                 # Save ROIs and boxes in dictionary for each well
                 for result_index in range(len(roi)):
                     well_name = f'{field_str}_well{result_index}'

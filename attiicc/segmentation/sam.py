@@ -1,14 +1,12 @@
-import numpy as np
 import torch
 import cv2
 import os
+import zipfile
 import supervision as sv
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-import zipfile
+import numpy as np
 import cupy as cp
-import attiicc as ac
-import seaborn as sns
 from typing import Dict, Tuple, List
 from roifile import ImagejRoi
 from attiicc import segment_anything as sa
@@ -116,7 +114,7 @@ class SamSegmenter:
             model_type (str): Specify the sam model type to load.
             Can use "vit_b", "vit_l", or "vit_h". 
         Output:
-            Sam: The loaded SAM model.
+            sam: The loaded SAM model.
         '''
         if torch.cuda.is_available():
             print("CUDA is available.")
@@ -169,8 +167,6 @@ class SamSegmenter:
             titles (list, optional): The titles to use for the images. Default is ['Source Image', 'Segmented Image'].
             save (bool, optional): Whether to save the image. Default is False.
             save_path (str, optional): The path to save the image. Default is None.
-        Outputs:
-            None
         '''
         mask_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX)
         detections = sv.Detections.from_sam(sam_result=self._sam_result)
@@ -186,7 +182,6 @@ class SamSegmenter:
         axs[1].imshow(annotated_image)
         axs[1].set_title(titles[1])
         axs[1].axis('off')
-
         if save:
         # Save the figure
             fig.savefig(save_path)
@@ -232,7 +227,7 @@ class SamSegmenter:
                 plt.savefig(save_path)    
         return
     
-    def filter_duplicate_masks(self, 
+    def _filter_duplicate_masks(self, 
                                centroid_list_sorted: list, 
                                coordinate_dict: dict, 
                                filter_distance: int,
@@ -240,7 +235,8 @@ class SamSegmenter:
                                save_heatmap: str = False,
                                validation_path: str = None) -> list:
         '''
-        Filter duplicate ROIs based on the distance between the centroids.
+        Filter duplicate ROIs based on the distance between the centroids. \
+        Helper function for generate_rois.
         Inputs:
             centroid_list_sorted (list): A list of lists containing the centroid coordinates \
                 and the ROI. The list is sorted by the y-coordinate of the centroid.
@@ -361,7 +357,7 @@ class SamSegmenter:
         centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
         # Remove duplicates
         print("Filtering for duplicates...")
-        filtered_coordinates = self.filter_duplicate_masks(centroid_list_sorted,
+        filtered_coordinates = self._filter_duplicate_masks(centroid_list_sorted,
                                             coordinate_dict,
                                             filter_distance=filter_distance,
                                             roi_path=roi_path,
