@@ -280,7 +280,6 @@ class SamSegmenter:
         centroid_list_filtered = [x for i, x in enumerate(centroid_list_sorted) if i not in remove_coords]
         # Remove exact duplicates by turning the list of lists into a set of tuples
         centroid_list_filtered = [tuple(x) for x in centroid_list_filtered]
-        print("Centroid list before removing duplicates: ", centroid_list_filtered)
         len_before = len(centroid_list_filtered)
         centroid_list_filtered = list(set(centroid_list_filtered))
         len_after = len(centroid_list_filtered)
@@ -367,10 +366,9 @@ class SamSegmenter:
                                             roi_path=roi_path,
                                             save_heatmap=save_heatmap,
                                             validation_path=validation_path)
-        print("Total number of ROIs: ", len(filtered_coordinates))
+        print("Total number of ROIs after filtering: ", len(filtered_coordinates))
         # Sort the list by y-coordinate
         filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
-        print("Centroid list after removing duplicates: ", filtered_coordinates)
         for i in filtered_coordinates:
             roi_list.append(coordinate_dict[tuple(i)][0])
             box_list.append(coordinate_dict[tuple(i)][2])

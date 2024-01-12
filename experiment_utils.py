@@ -6,7 +6,9 @@ import numpy as np
 import attiicc as ac
 from PIL import Image
 
-def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
+def convert_tif_to_png(tif_path: str, 
+                       png_path: str = None, 
+                       single_image: bool = False) -> None:
     '''
     Convert a .tif image to a .png image.
     Inputs:
@@ -14,15 +16,21 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> None:
         png_path: (str) The path to a directory of .png images. Default is None.
             If None, a new directory will be created at the same level as the
             tif_path directory, with '_png' appended to the name.
+        single_image: (bool) If True, then tif_path is a path to a single .tif
     Outputs:
         png_path: (str) The path to a directory of .png images.
     '''
-    files = os.listdir(tif_path)
-    total = len(files)
-    if png_path is None:
-        png_path = tif_path + '_png'
-    if not os.path.exists(png_path):
-        os.makedirs(png_path)
+    if single_image is False:
+        files = os.listdir(tif_path)
+        total = len(files)
+        if png_path is None:
+            png_path = tif_path + '_png'
+        if not os.path.exists(png_path):
+            os.makedirs(png_path)
+    else:
+        files = [tif_path]
+        if png_path is None:
+            png_path = tif_path.rstrip(".TIF") + '_png'
     for i, f in enumerate(files):
         if '.TIF' in f and '._' not in f:
             print(f'({i}/{total})  Converting image {f} to .png')
