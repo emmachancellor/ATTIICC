@@ -9,7 +9,7 @@ import zipfile
 import cupy as cp
 import attiicc as ac
 import seaborn as sns
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from roifile import ImagejRoi
 from attiicc import segment_anything as sa
 
@@ -24,19 +24,20 @@ class SamSegmenter:
         model_path: str = None,
         model_type: str = "vit_h",
         png_path: str = None,
-        tif_path: str = None
+        tif_path: str = None,
+        **kwargs
     ) -> None:
         '''
         Initialize a SAM model and calculate the segmentation for an image.
         Inputs:
-            model_path (str): The path to the model checkpoint. This must be downloaded
+            model_path (str): The path to the model checkpoint. This must be downloaded \
                 from Meta on a user's local machine. Checkpoints can be downloaded from \
                 https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
-            model_type (str, optional): Specify the sam model type to load.
+            model_type (str, optional): Specify the sam model type to load.\
             Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
-            png_path (str, optional): The path to the image to segment. 
+            png_path (str, optional): The path to the image to segment. \
             Default is None.
-            tif_path (str, optional): The path to the tif image to crop with 
+            tif_path (str, optional): The path to the tif image to crop with \
                 the ROIs. Default is None.
         Outputs:
             None
@@ -70,9 +71,11 @@ class SamSegmenter:
             self.stability_score = [mask["stability_score"] for mask in self._sam_result]
             self.crop_box = [mask["crop_box"] for mask in self._sam_result]
     
-    def update_image(self, png_path: str, tif_path: str) -> None:
+    def update_image(self, 
+                     png_path: str, 
+                     tif_path: str) -> None:
         '''
-        Update the image path and recalculate the segmentation results 
+        Update the image path and recalculate the segmentation results \
         without re-loading the SAM model. 
         '''
         self._png_path = png_path
@@ -87,13 +90,14 @@ class SamSegmenter:
         self.crop_box = [mask["crop_box"] for mask in self._sam_result]
         return
     
-    def sam_area_filter(self, target_area=[11100,12000]) -> None:
+    def sam_area_filter(self, 
+                        target_area: List[str]=[11100,12000]) -> None:
         '''
         Filter the SAM results by area.
         Inputs:
-            target_area (list, optional): The target area of the ROI.
-                Default is [11500,13600] which is the area of the nanowells where 
-                the first value is the lower bound and the second value is the upper bound.
+            target_area (list, optional): The target area of the ROI. \
+                Default is [11500,13600] which is the area of the nanowells where \
+                the first value is the lower bound and the second value is the upper bound.\
         '''
         self._sam_result = [mask for mask in self._sam_result if target_area[0] < mask['area'] < target_area[1]]
         self.segmentation = [mask["segmentation"] for mask in self._sam_result]
@@ -104,7 +108,8 @@ class SamSegmenter:
         self.stability_score = [mask["stability_score"] for mask in self._sam_result]
         self.crop_box = [mask["crop_box"] for mask in self._sam_result]
 
-    def _load_sam_model(self, model_type) -> sa.Sam:
+    def _load_sam_model(self, 
+                        model_type: str) -> sa.Sam:
         '''
         Loads a pretrained SAM model.
         Input:
@@ -128,7 +133,9 @@ class SamSegmenter:
         return sam
 
 
-    def _segment_image(self, sam, png_path) -> Tuple[Dict, np.ndarray]:
+    def _segment_image(self, 
+                       sam, 
+                       png_path: str) -> Tuple[Dict, np.ndarray]:
         '''
         Segments an image using a pretrained SAM model.
         Inputs:
@@ -151,8 +158,11 @@ class SamSegmenter:
         sam_result = mask_generator.generate(image_rgb)
         return sam_result, image_bgr
     
-    def plot_segmented_image(self, titles=['Source Image', 'Segmented Image'], 
-                             save=False, save_path=None) -> None:
+    def plot_segmented_image(self, 
+                             titles: List(str) = ['Source Image', 'Segmented Image'], 
+                             save: bool = False, 
+                             save_path: str = None, 
+                             **kwargs) -> None:
         '''
         Plots the original image and the segmented image side-by-side.
         Inputs:
@@ -184,8 +194,12 @@ class SamSegmenter:
         plt.show()
         return 
 
-    def plot_masks(self, save=False, save_path=None, 
-                   grid_size=(30, 5), size=(48,96)) -> None:
+    def plot_masks(self, 
+                   save: bool = False, 
+                   save_path: str = None, 
+                   grid_size: Tuple[int,int] = (30, 5),
+                   size: Tuple[int,int] = (48,96),
+                   **kwargs) -> None:
         '''
         Plots masks from the segmentation results.
         Inputs:
@@ -200,43 +214,41 @@ class SamSegmenter:
         mask['segmentation']
         for mask
         in sorted(self._sam_result, key=lambda x: x['area'], reverse=True)]
-
         num_images = len(masks)
         grid_size = grid_size
-
         # Create a figure and a grid of axes
         fig, axs = plt.subplots(*grid_size, figsize=size)
-
         # Reshape axs to 1-D array to easily iterate over
         axs = axs.ravel()
-
         # Plot the images onto the axes
         for i in range(num_images):
             axs[i].imshow(masks[i])
             axs[i].axis('off')
-
         # Remove unused subplots
         if num_images < np.prod(grid_size):
             for j in range(num_images, np.prod(grid_size)):
                 fig.delaxes(axs[j])
-
             if save:
                 plt.savefig(save_path)    
         return
-
-    def filter_duplicate_masks(self, centroid_list_sorted, 
-                               coordinate_dict, 
-                               filter_distance,
-                               roi_path = None, 
-                               save_heatmap = False,
-                               validation_path = None) -> list:
+    
+    def filter_duplicate_masks(self, 
+                               centroid_list_sorted: list, 
+                               coordinate_dict: dict, 
+                               filter_distance: int,
+                               roi_path: str = None, 
+                               save_heatmap: str = False,
+                               validation_path: str = None) -> list:
         '''
         Filter duplicate ROIs based on the distance between the centroids.
         Inputs:
             centroid_list_sorted (list): A list of lists containing the centroid coordinates \
                 and the ROI. The list is sorted by the y-coordinate of the centroid.
+            coordinate_dict (dict): A dictionary containing the centroid coordinates as keys \
+                and the ROI and segmentation number as values.
             filter_distance (int): The pixel distance to use for filtering. ROIs with centroids \
                 within this distance will be filtered out.
+            roi_path (str, optional): The path to a directory where ROIs can be saved. Default is None.
             save_heatmap (bool, optional): Whether to save the heatmap. Default is False.
             validation_path (str, optional): The path to save the validation plot. Default is None.
         Outputs:
@@ -246,7 +258,6 @@ class SamSegmenter:
         remove_coords = set()
         do_not_remove_coords = set()
         seg_num_set = set()
-        exact_duplicate_coords = set()
         matrix_coordinates = cp.array(centroid_list_sorted)
         difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
         sq_difference = cp.square(difference)
@@ -265,7 +276,6 @@ class SamSegmenter:
                 remove_coords.add(i)
                 seg_num_set.add(seg_num_i)
                 do_not_remove_coords.add(j)
-
         # Removing coordinates from the original list
         print("Removing coordinates...", remove_coords)
         centroid_list_filtered = [x for i, x in enumerate(centroid_list_sorted) if i not in remove_coords]
@@ -301,13 +311,15 @@ class SamSegmenter:
         return centroid_list_filtered
 
 
-    def generate_rois(self, target_area=[11100,12000],
-                            filter_distance=10,
-                            roi_path=None,
-                            roi_archive=True,
-                            validation_plot=False,
-                            validation_path=None,
-                            save_heatmap=False):
+    def generate_rois(self,
+                      target_area: List[List[int]] = [11100,12000], 
+                      filter_distance: int = 10,
+                      roi_path: str = None,
+                      roi_archive: bool = True,
+                      validation_plot:bool = False,
+                      validation_path:bool = None,
+                      save_heatmap: bool = False,
+                      **kwargs) -> list:
         '''
         Generate ROIs from the segmentation results.
         Inputs:
