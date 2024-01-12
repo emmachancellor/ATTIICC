@@ -27,7 +27,8 @@ class NanoExperiment(SamSegmenter):
             num_time_points: int = None,
             segment_channel: int = None,
             field_leading_zero: bool = False,
-            time_point_leading_zero: bool = False
+            time_point_leading_zero: bool = False,
+            **kwargs # For SamSegmenter
     ) -> None:
         '''Initialize a NanoExperiment object.
         The experimental data should be organized as a directory tree with the following structure:

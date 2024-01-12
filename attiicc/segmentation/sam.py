@@ -246,6 +246,7 @@ class SamSegmenter:
         remove_coords = set()
         do_not_remove_coords = set()
         seg_num_set = set()
+        exact_duplicate_coords = set()
         matrix_coordinates = cp.array(centroid_list_sorted)
         difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
         sq_difference = cp.square(difference)
@@ -254,29 +255,35 @@ class SamSegmenter:
         indices = cp.nonzero(mask)
         indices_np = [cp.asnumpy(idx) for idx in indices]
         for i, j in zip(indices_np[0], indices_np[1]):
+            coord_i = tuple(centroid_list_sorted[i])
+            coord_j = tuple(centroid_list_sorted[j])
+            #print("Compare Coordinates: ", coord_i, coord_j)
             seg_num_i = coordinate_dict[tuple(centroid_list_sorted[i])][1]
             seg_num_j = coordinate_dict[tuple(centroid_list_sorted[j])][1]
-            if i < j and i not in do_not_remove_coords and j not in remove_coords:
+            if i < j and i not in do_not_remove_coords and j not in remove_coords and seg_num_i != seg_num_j:
+                print("Duplicate ROI found: ", coord_i, coord_j)
                 remove_coords.add(i)
-                seg_num_set.add(coordinate_dict[tuple(centroid_list_sorted[i])][1])
+                seg_num_set.add(seg_num_i)
                 do_not_remove_coords.add(j)
-            #TODO: Need to check for duplicate ROIs in the same nanowell
-            elif seg_num_i == seg_num_j and seg_num_i in seg_num_set:
-                print("Duplicate ROI found: ", i, j)
-                remove_coords.add(i)
-                seg_num_set.add(coordinate_dict[tuple(centroid_list_sorted[i])][1])
-                do_not_remove_coords.add(j) 
+
         # Removing coordinates from the original list
+        print("Removing coordinates...", remove_coords)
         centroid_list_filtered = [x for i, x in enumerate(centroid_list_sorted) if i not in remove_coords]
-        print(centroid_list_filtered)
-        print("Coordinates to remove: ", remove_coords)
-
-
+        # Remove exact duplicates by turning the list of lists into a set of tuples
+        centroid_list_filtered = [tuple(x) for x in centroid_list_filtered]
+        len_before = len(centroid_list_filtered)
+        centroid_list_filtered = list(set(centroid_list_filtered))
+        len_after = len(centroid_list_filtered)
+        number_of_exact_duplicates = len_before - len_after
+        print(f"Removing {number_of_exact_duplicates} exact duplicates...")
+        # Convert back to a list of lists
+        centroid_list_filtered = [list(x) for x in centroid_list_filtered]
+        # Save heatmap
         if save_heatmap:
             plt.figure(figsize=(8, 6))
             plt.imshow(distance_matrix.get(), cmap='viridis')
             plt.colorbar(label='Distance')
-            plt.title('Centroid Distance Heatmap')
+            plt.title('Centroid Distance Heatmap Before Duplicate Removal')
             plt.xlabel('Centroid Index')
             plt.ylabel('Centroid Index')
             plt.show()
@@ -351,7 +358,6 @@ class SamSegmenter:
         print("Total number of ROIs: ", len(filtered_coordinates))
         # Sort the list by y-coordinate
         filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
-        print("Filtered Coordinates: ", filtered_coordinates)
         for i in filtered_coordinates:
             roi_list.append(coordinate_dict[tuple(i)][0])
             box_list.append(coordinate_dict[tuple(i)][2])
@@ -373,11 +379,10 @@ class SamSegmenter:
                     for root, _, files in os.walk(new_path):
                         for file in files:
                             zipf.write(os.path.join(root, file), file)
-                print(f"ROIs archived for {image_name}")
             if validation_plot:
                 # Load image
                 img = mpimg.imread(self._png_path)
-                print("Generating Validation Plot: ", self._png_path)
+                print("Generating validation plot for ", self._png_path)
                 plt.imshow(img, cmap='gray')
                 # Create a scatter plot of the centroids
                 plt.scatter(*zip(*filtered_coordinates), color='yellow', marker='o')
