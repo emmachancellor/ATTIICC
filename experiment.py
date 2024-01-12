@@ -70,7 +70,10 @@ class NanoExperiment(SamSegmenter):
         assert isinstance(num_channels, int), 'num_channels must be an integer specifying the number of channels'
         assert isinstance(time_point_id, str), 'time_point_id must be a string specifying the time point identifier, Ex. \'t\''
         assert isinstance(num_time_points, int), 'num_time_points must be an integer specifying the number of time points'
-        super().__init__(**kwargs)
+        sam_kwargs = {key: kwargs[key] for key in kwargs if key not in ['generate_rois_params'] 
+                      and key not in ['plot_segmented_image_params'] and key not in ['plot_masks_params']}
+        self._sam_kwargs = sam_kwargs
+        super().__init__(**self._sam_kwargs)
         self._experiment_path = experiment_path
         self._field_id = field_id
         self._num_fields = num_fields
@@ -94,6 +97,15 @@ class NanoExperiment(SamSegmenter):
         self.generate_rois_params = kwargs.get('generate_rois_params', {})
         self.plot_segmented_image_params = kwargs.get('plot_segmented_image_params', {})
         self.plot_masks_params = kwargs.get('plot_masks_params', {})
+    
+    @property
+    def sam_kwargs(self) -> dict:
+        return self._sam_kwargs
+
+    @sam_kwargs.setter
+    def sam_kwargs(self, sam_kwargs) -> None:
+        self._sam_kwargs = sam_kwargs
+
     @property
     def field_leading_zero(self) -> bool:
         return self._field_leading_zero
@@ -132,6 +144,12 @@ class NanoExperiment(SamSegmenter):
             segment_channel: (int) The channel to use for segmentation. Default is None.
             field_leading_zero: (bool) Whether the field of view identifier has a leading zero.
             time_point_leading_zero: (bool) Whether the time point identifier has a leading zero.
+            **kwargs: Keyword arguments for SamSegmenter by method. 
+                generate_rois_params: (dict) Keyword arguments for SamSegmenter.generate_rois().
+                plot_segmented_image_params: (dict) Keyword arguments for SamSegmenter.plot_segmented_image().
+                plot_masks_params: (dict) Keyword arguments for SamSegmenter.plot_masks().
+                For all parameters, format should be: {'parameter_name': parameter_value}
+                Example: generate_rois_params = {'save_rois': True, 'save_directory': 'experiment_path/ROI'}
         '''
         self._field_id = field_id
         self._num_fields = num_fields
@@ -148,7 +166,8 @@ class NanoExperiment(SamSegmenter):
                           model_path: str = None, 
                           model_type: str = 'vit_h', 
                           output_directory: str = None, 
-                          convert_png: bool = False) -> None:
+                          convert_png: bool = False,
+                          **kwargs) -> None:
         '''
         Segment and crop the images in the experiment.
         Takes in images that are ordered by the experiment structure, then
@@ -192,6 +211,9 @@ class NanoExperiment(SamSegmenter):
         '''
         assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified for segmentation. \
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
+        self.generate_rois_params = kwargs.get('generate_rois_params', {})
+        self.plot_segmented_image_params = kwargs.get('plot_segmented_image_params', {})
+        self.plot_masks_params = kwargs.get('plot_masks_params', {})
         if output_directory is None:
             roi_path = self._experiment_path + '/ROI'
         else: 

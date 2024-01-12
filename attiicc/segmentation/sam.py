@@ -157,7 +157,7 @@ class SamSegmenter:
         return sam_result, image_bgr
     
     def plot_segmented_image(self, 
-                             titles: List(str) = ['Source Image', 'Segmented Image'], 
+                             titles: List[str] = ['Source Image', 'Segmented Image'], 
                              save: bool = False, 
                              save_path: str = None, 
                              **kwargs) -> None:
@@ -292,8 +292,6 @@ class SamSegmenter:
             plt.title('Centroid Distance Heatmap Before Duplicate Removal')
             plt.xlabel('Centroid Index')
             plt.ylabel('Centroid Index')
-            plt.show()
-            plt.savefig('heatmap.png')
             if validation_path is None:
                 image_name = os.path.basename(self._png_path).rstrip(".png")
                 validation_dir = os.path.join(roi_path, "validation_plots")
@@ -304,6 +302,7 @@ class SamSegmenter:
             else:
                 plt.savefig(os.path.join(validation_dir, f"{image_name}_heatmap.png"))
             print("Heatmap saved to: ", f'{validation_dir}/{image_name}_heatmap.png')
+            plt.show()
         return centroid_list_filtered
 
 
