@@ -238,6 +238,7 @@ class NanoExperiment(SamSegmenter):
                 raise ValueError(f'No .png images found in {png_image_directory_path}. \
                     Please convert the .TIF images to .png using the convert_png parameter.')
             # With PNG images, segment nanowells in images
+            begin_segmenting = True
             for i, j in enumerate(os.listdir(png_image_directory_path)):
                 if self._time_point_leading_zero and i < 10:
                     time_point_str = '0' + str(i)
@@ -245,11 +246,12 @@ class NanoExperiment(SamSegmenter):
                     time_point_str = str(i)
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
-                if i == 0: # Initialize SamSegmenter instance
+                if begin_segmenting is True: # Initialize SamSegmenter instance
                     segmentation = ac.SamSegmenter(model_path=model_path, 
                                                     model_type=model_type, 
                                                     png_path=png_path,
                                                     tif_path=tif_path)
+                    begin_segmenting = False
                 else: # If SamSegmenter instance already exists, update the image path, don't need to re-load SAM model
                     segmentation.update_image(png_path, tif_path)
                 roi, box = segmentation.generate_rois(**self.generate_rois_params)

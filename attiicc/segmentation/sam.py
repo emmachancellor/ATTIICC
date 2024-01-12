@@ -273,10 +273,14 @@ class SamSegmenter:
                 seg_num_set.add(seg_num_i)
                 do_not_remove_coords.add(j)
         # Removing coordinates from the original list
-        print("Removing coordinates...", remove_coords)
+        if len(remove_coords) > 0:
+            print("Removing coordinates...", remove_coords)
+        else:
+            print("No coordinates to remove.")
         centroid_list_filtered = [x for i, x in enumerate(centroid_list_sorted) if i not in remove_coords]
         # Remove exact duplicates by turning the list of lists into a set of tuples
         centroid_list_filtered = [tuple(x) for x in centroid_list_filtered]
+        print("Centroid list before removing duplicates: ", centroid_list_filtered)
         len_before = len(centroid_list_filtered)
         centroid_list_filtered = list(set(centroid_list_filtered))
         len_after = len(centroid_list_filtered)
@@ -355,6 +359,7 @@ class SamSegmenter:
         # Sort the list of lists by the value at index 0
         centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
         # Remove duplicates
+        print("Total number of ROIs before filtering: ", len(centroid_list_sorted))
         print("Filtering for duplicates...")
         filtered_coordinates = self._filter_duplicate_masks(centroid_list_sorted,
                                             coordinate_dict,
@@ -365,6 +370,7 @@ class SamSegmenter:
         print("Total number of ROIs: ", len(filtered_coordinates))
         # Sort the list by y-coordinate
         filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
+        print("Centroid list after removing duplicates: ", filtered_coordinates)
         for i in filtered_coordinates:
             roi_list.append(coordinate_dict[tuple(i)][0])
             box_list.append(coordinate_dict[tuple(i)][2])
@@ -405,5 +411,6 @@ class SamSegmenter:
                     plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
                 else:
                     plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
+                plt.show()
         return roi_and_box_list
     
