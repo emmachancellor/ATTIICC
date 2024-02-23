@@ -167,7 +167,7 @@ class NanoExperiment(SamSegmenter):
                           model_type: str = 'vit_h', 
                           output_directory: str = None, 
                           convert_png: bool = False,
-                          **kwargs) -> None:
+                          **kwargs) -> dict:
         '''
         Segment and crop the images in the experiment.
         Takes in images that are ordered by the experiment structure, then
@@ -208,6 +208,17 @@ class NanoExperiment(SamSegmenter):
                 the directory extension 'png.' For example, '/experiment_path/field_id_0_channel_id_0_png/'. \
                 Default is False.
             
+        Outputs:
+            well_dict (dict): A dictionary containing the ROIs, bounding box coordinates,
+                and time point identifier for each well across all time points. 
+                The dictionary is structured as follows:
+                {'field_id_0_well_id_0': [[roi_0, roi_1, ...], 
+                                        [box_0, box_1, ...], 
+                                        [time_point_0, time_point_1, ...]],
+                'field_id_0_well_id_1': [[roi_0, roi_1, ...],
+                                        [box_0, box_1, ...],
+                                        [time_point_0, time_point_1, ...]]}
+            
         '''
         assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified for segmentation. \
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
@@ -240,10 +251,6 @@ class NanoExperiment(SamSegmenter):
             # With PNG images, segment nanowells in images
             begin_segmenting = True
             for i, j in enumerate(os.listdir(png_image_directory_path)):
-                if self._time_point_leading_zero and i < 10:
-                    time_point_str = '0' + str(i)
-                else:
-                    time_point_str = str(i)
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
                 if begin_segmenting is True: # Initialize SamSegmenter instance
@@ -260,7 +267,7 @@ class NanoExperiment(SamSegmenter):
                     well_name = f'{field_str}_well{result_index}'
                     time_point_index = png_path.find(self._time_point_id)
                     if time_point_index != -1:
-                        if self.time_point_leading_zero:
+                        if self._time_point_leading_zero:
                             time_point = png_path[time_point_index:time_point_index + 3]
                         else:
                             time_point = png_path[time_point_index:time_point_index + 2]
@@ -270,6 +277,7 @@ class NanoExperiment(SamSegmenter):
                         well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
                                                 well_dict[well_name][1] + [box[result_index]], 
                                                 well_dict[well_name][2] + [time_point]]
+        
         return well_dict
             
 
