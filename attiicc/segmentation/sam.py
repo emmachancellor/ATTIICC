@@ -317,7 +317,7 @@ class SamSegmenter:
                       validation_plot:bool = False,
                       validation_path:bool = None,
                       save_heatmap: bool = False,
-                      well_match: bool = True,
+                      well_match: bool = False,
                       **kwargs) -> list:
         '''
         Generate ROIs from the segmentation results.
@@ -333,7 +333,7 @@ class SamSegmenter:
             validation_path (str, optional): Path to a directory to save validation plots
             save_heatmap (bool, optional): Whether to save a correlation heatmap of the centroid coordinates.
             well_match (bool, optional): Whether to enforce a match between the location of each well across
-                time points using the `well_matching` method in the NanoExperiment class. Default is True. 
+                time points using the `well_matching` method in the NanoExperiment class. Default is False. 
         Outputs:
             roi_and_box_list: a list of lists containing the ROIs and the bounding boxes, sorted
                 in order by the y-coordinate of the centroid. The first list contains ROIs
