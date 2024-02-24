@@ -315,6 +315,7 @@ class SamSegmenter:
                       roi_path: str = None,
                       roi_archive: bool = True,
                       validation_plot:bool = False,
+                      print_plot:bool = False,
                       validation_path:bool = None,
                       save_heatmap: bool = False,
                       well_match: bool = False,
@@ -330,6 +331,7 @@ class SamSegmenter:
             roi_archive (bool, optional): Whether to save the ROIs as a .zip. Default is True.
                 This will save the roi.zip file in the roi_path. Default is True.
             validation_plot (bool, optional): Whether to save the validation plot. Default is False.
+            print_plot (bool, optional): Whether to print the validation plot. Default is False.
             validation_path (str, optional): Path to a directory to save validation plots
             save_heatmap (bool, optional): Whether to save a correlation heatmap of the centroid coordinates.
             well_match (bool, optional): Whether to enforce a match between the location of each well across
@@ -415,6 +417,7 @@ class SamSegmenter:
                     plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
                 else:
                     plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
-                plt.show()
+                if print_plot:
+                    plt.show()
         return roi_and_box_list
     
