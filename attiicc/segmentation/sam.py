@@ -419,5 +419,6 @@ class SamSegmenter:
                     plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
                 if print_plot:
                     plt.show()
+                plt.close()
         return roi_and_box_list
     

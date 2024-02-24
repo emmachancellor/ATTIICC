@@ -65,17 +65,21 @@ def find_files(directory: str,
     Outputs:
         filename: (str) The path to a file that matches both patterns.
     '''
+    matching_fies = []
     for root, dirs, files in os.walk(directory):
         for basename in files:
             if fnmatch.fnmatch(basename, f'*{pattern1}*') and \
-                                fnmatch.fnmatch(basename, f'*{pattern2}*') and \
-                                fnmatch.fnmatch(basename, f'*{pattern3}*'):
+                fnmatch.fnmatch(basename, f'*{pattern2}*') and \
+                fnmatch.fnmatch(basename, f'*{pattern3}*'):
                 filename = os.path.join(root, basename)
-                yield filename
+                print("appending:", filename)
+                matching_fies.append(filename)
+    return matching_fies
 
 def generate_comparison_plot(image_1: str, 
                              image_2: str,
-                             time_point: int = None,
+                             time_point_1: str = None,
+                             time_point_2: str = None,
                              field_of_view: str = None,
                              figsize: tuple = (10, 5),
                              save_path: str = None) -> None:
@@ -102,9 +106,8 @@ def generate_comparison_plot(image_1: str,
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Adjust the figsize as needed
     # Display the first image in the first subplot
     axes[0].imshow(img1)
-    axes[0].set_title(f'Field {field_of_view} at Time Point {time_point}')  # Add a title to the first subplot
+    axes[0].set_title(f'Field {field_of_view} at Time Point {time_point_1}')  # Add a title to the first subplot
     # Display the second image in the second subplot
-    time_point_2 = time_point + 1
     axes[1].imshow(img2)
     axes[1].set_title(f'Field {field_of_view} at Time Point {time_point_2}')  # Add a title to the second subplot
     # Hide the axis ticks and labels for better presentation
@@ -116,5 +119,5 @@ def generate_comparison_plot(image_1: str,
     plt.show()
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-        plt.savefig(save_path + f'/comparison_{field_of_view}_{time_point}.png')
+        plt.savefig(save_path + f'/comparison_{field_of_view}_{time_point_1}.png')
     return

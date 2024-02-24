@@ -182,44 +182,70 @@ class NanoExperiment(SamSegmenter):
         Outputs:
             None
         '''
+        field_set = set()
         for well, vals in well_dict.items():
+            if well[:3] in field_set:
+                continue
+            else:
+                field_set.add(well[:3])
+                print(f'Checking well {well} for consistency across time points')
                 boxes = vals[1]
+                total_rois = vals[3]
+                print(total_rois)
                 sum_boxes = [np.sum(box) for box in boxes]
                 for i, (current, next) in enumerate(zip(sum_boxes, sum_boxes[1:])):
-                    print(current)
-                    if abs(current - next) > 10:
-                        print(f"Box {i} is different than box {i+1} by more than 10 pixels")
-                        # access validation plot images (from adjacent time points)
-                        roi_path = self.generate_rois_params.get('roi_path')
-                        validation_directory = roi_path + '/validation_plots'
-                        field_str = well[:3]
-                        plot_path_t1 = find_files(validation_directory, field_str, 'validation', 'p'+str(i))
-                        plot_path_t2 = find_files(validation_directory, field_str, 'validation', 'p'+str(i+1))
-                        # Create comparison plot of the two images with labeled ROIs
-                        comparison_plot_path = roi_path + '/comparison_plots'
-                        generate_comparison_plot(plot_path_t1, 
-                                                 plot_path_t2, 
-                                                 field_of_view=field_str, 
-                                                 time_point=i, 
-                                                 save_path=comparison_plot_path)
-                        # User makes decision on whether to overwrite the ROIs of the image that had an incorrect segmentation
-                        time_point_2 = i + 1
-                        user_input = input("Please view discordant ROIs in the comparison plot.\n"
-                                           "If working outside a Jupyter{ notebook, the comparison plot will be saved in the ROI directory.\n"
-                                           f"If ROI {i} is incorrect, enter (1) to overwrite the ROIs with the ROIs from {i+1}.\n"
-                                           f"If ROI {i+1} is incorrect, enter (2) to overwrite the ROIs with the ROIs from {i}.\n"
-                                           "If no action should be taken, enter (0).\n")
-                        # Response to user
-                        if user_input == '1':
-                            well_dict[well][0][i] = well_dict[well][0][i+1]
-                            well_dict[well][1][i] = well_dict[well][1][i+1]
-                            well_dict[well][2][i] = well_dict[well][2][i+1]
-                        elif user_input == '2':
-                            well_dict[well][0][i+1] = well_dict[well][0][i]
-                            well_dict[well][1][i+1] = well_dict[well][1][i]
-                            well_dict[well][2][i+1] = well_dict[well][2][i]
+                    print("hello")
+                    print(i)
+                    print(len(total_rois) - 1)
+                    if i < len(total_rois) - 1:
+                        current_rois = total_rois[i]
+                        print("Current ROI: ", current_rois)
+                        next_rois = total_rois[i+1]
+                        print("Next ROI: ", next_rois)
+                        if i < 10:
+                            time_point_1 = 'p0'+str(i)
+                        if i+1 < 10:
+                            time_point_2 = 'p0'+str(i+1)
                         else:
-                            continue
+                            time_point_1 = 'p'+str(i)
+                            time_point_2 = 'p'+str(i+1)
+                        if abs(current - next) > 10 or current_rois != next_rois:
+                            print(f"Box {i} is different than box {i+1} by more than 10 pixels")
+                            # access validation plot images (from adjacent time points)
+                            roi_path = self.generate_rois_params.get('roi_path')
+                            validation_directory = roi_path + '/validation_plots'
+                            field_str = well[:3]
+                            print("Time Points:" , time_point_1, time_point_2)
+                            plot_path_t1 = find_files(validation_directory, field_str, 'validation', time_point_1)
+                            plot_path_t2 = find_files(validation_directory, field_str, 'validation', time_point_2)
+                            # Create comparison plot of the two images with labeled ROIs
+                            print("Path 1: ", plot_path_t1)
+                            print("Path 2: ", plot_path_t2)
+                            comparison_plot_path = roi_path + '/comparison_plots'
+                            if len(plot_path_t1) > 0 and len(plot_path_t2) > 0:
+                                generate_comparison_plot(plot_path_t1[0], 
+                                                        plot_path_t2[0], 
+                                                        field_of_view=field_str, 
+                                                        time_point_1=time_point_1,
+                                                        time_point_2=time_point_2, 
+                                                        save_path=comparison_plot_path)
+                            # User makes decision on whether to overwrite the ROIs of the image that had an incorrect segmentation
+                            user_input = input("Please view discordant ROIs in the comparison plot.\n"
+                                            "If working outside a Jupyter{ notebook, the comparison plot will be saved in the ROI directory.\n"
+                                            f"If ROI {i} is incorrect, enter (1) to overwrite the ROIs with the ROIs from {i+1}.\n"
+                                            f"If ROI {i+1} is incorrect, enter (2) to overwrite the ROIs with the ROIs from {i}.\n"
+                                            "If no action should be taken, enter (0).\n")
+                            # Response to user
+                            if user_input == '1':
+                                well_dict[well][0][i] = well_dict[well][0][i+1]
+                                well_dict[well][1][i] = well_dict[well][1][i+1]
+                                well_dict[well][2][i] = well_dict[well][2][i+1]
+                            elif user_input == '2':
+                                well_dict[well][0][i+1] = well_dict[well][0][i]
+                                well_dict[well][1][i+1] = well_dict[well][1][i]
+                                well_dict[well][2][i+1] = well_dict[well][2][i]
+                            else:
+                                continue
         return None
 
     def segment_nanowells(self, 
@@ -324,6 +350,7 @@ class NanoExperiment(SamSegmenter):
                 roi, box = segmentation.generate_rois(**self.generate_rois_params)
                 # Save ROIs and boxes in dictionary for each well
                 for result_index in range(len(roi)):
+                    total_rois = len(roi)
                     well_name = f'{field_str}_well{result_index}'
                     time_point_index = png_path.find(self._time_point_id)
                     if time_point_index != -1:
@@ -332,11 +359,14 @@ class NanoExperiment(SamSegmenter):
                         else:
                             time_point = png_path[time_point_index:time_point_index + 2]
                     if well_name not in well_dict:
-                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [time_point]]
+                        #TODO fix time_point, currently only adding the string 'pro'
+                        print(time_point)
+                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [time_point], [total_rois]]
                     else:
                         well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
                                                 well_dict[well_name][1] + [box[result_index]], 
-                                                well_dict[well_name][2] + [time_point]]
+                                                well_dict[well_name][2] + [time_point],
+                                                well_dict[well_name][3] + [total_rois]]
         # Perform well-matching. If well locations are not consistent across time points,
         # the user will be prompted to verify the discordance.
         if self.generate_rois_params.get('well_matching'):
