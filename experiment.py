@@ -336,6 +336,8 @@ class NanoExperiment(SamSegmenter):
                     Please convert the .TIF images to .png using the convert_png parameter.')
             # With PNG images, segment nanowells in images
             begin_segmenting = True
+            whole_image_dict = {}
+            whole_image_dict[field_str] = {"roi_lengths": [], "png_path": []}
             for i, j in enumerate(os.listdir(png_image_directory_path)):
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
@@ -348,30 +350,34 @@ class NanoExperiment(SamSegmenter):
                 else: # If SamSegmenter instance already exists, update the image path, don't need to re-load SAM model
                     segmentation.update_image(png_path, tif_path)
                 roi, box = segmentation.generate_rois(**self.generate_rois_params)
+                whole_image_dict[field_str]["roi_lengths"].append(len(roi))
+                whole_image_dict[field_str]["png_path"].append(png_path)
                 # Save ROIs and boxes in dictionary for each well
                 for result_index in range(len(roi)):
                     total_rois = len(roi)
                     well_name = f'{field_str}_well{result_index}'
-                    time_point_index = png_path.find(self._time_point_id)
-                    if time_point_index != -1:
-                        if self._time_point_leading_zero:
-                            time_point = png_path[time_point_index:time_point_index + 3]
-                        else:
-                            time_point = png_path[time_point_index:time_point_index + 2]
+                    png_name = png_path.split('/')[-1]
+                    # time_point_index = png_path.find(self._time_point_id)
+                    # if time_point_index != -1:
+                    #     if self._time_point_leading_zero:
+                    #         time_point = png_path[time_point_index:time_point_index + 3]
+                    #     else:
+                    #         time_point = png_path[time_point_index:time_point_index + 2]
                     if well_name not in well_dict:
-                        #TODO fix time_point, currently only adding the string 'pro'
-                        print(time_point)
-                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [time_point], [total_rois]]
+                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [total_rois]]
                     else:
                         well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
-                                                well_dict[well_name][1] + [box[result_index]], 
-                                                well_dict[well_name][2] + [time_point],
+                                                well_dict[well_name][1] + [box[result_index]],
+                                                well_dict[well_name][2] + [png_name], 
                                                 well_dict[well_name][3] + [total_rois]]
+                    if 'well0' in well_name:
+                        sum_boxes = [np.sum(box) for box in well_dict[well_name][1]]
+                        whole_image_dict[well_name] = sum_boxes
         # Perform well-matching. If well locations are not consistent across time points,
         # the user will be prompted to verify the discordance.
         if self.generate_rois_params.get('well_matching'):
             self.match_wells(well_dict)
-        return well_dict
+        return whole_image_dict
 
 
     def crop_nanowells(self, output_directory: str = None):
