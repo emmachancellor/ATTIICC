@@ -166,37 +166,123 @@ class NanoExperiment(SamSegmenter):
         self._time_point_leading_zero = time_point_leading_zero
         return print(self.structure)
 
+    def generate_well_dict(self,
+                           total_rois: int, 
+                           field_str: str,
+                           png_path: str,
+                           roi: list,
+                           box: list,
+                           whole_image_dict: dict,
+                           well_dict = None) -> dict:
+        '''
+        Updates a dictionary containing well information across each time point \
+        for each field and update the whole_image_dict with the sum of the bounding boxes
+        of the first well in each time point.
+
+        Inputs:
+            total_rois: (int) The total number of ROIs segmented in the image.
+            field_str: (str) The field of view identifier.
+            png_path: (str) The path to the image in the time series.
+            roi: (list) A list of the ROIs segmented in the image.
+            box: (list) A list of the bounding box coordinates for each ROI.
+            whole_image_dict: (dict) A dictionary containing the field level information 
+                for each nanowell image.
+            well_dict: (dict) A dictionary containing the ROIs, bounding box coordinates,
+                and time point identifier for each well across all time points. Default is None.
+                If left as None, the function will initialize an empty dictionary.
+        
+        Outputs:
+            well_dict (dict): A dictionary containing the ROIs, bounding box coordinates,
+                and time point identifier for each well across all time points. 
+                The dictionary is structured as follows:
+                {'field_id_0_well_id_0': [[roi_0, roi_1, ...], 
+                                        [box_0, box_1, ...], 
+                                        [time_point_0, time_point_1, ...]],
+                'field_id_0_well_id_1': [[roi_0, roi_1, ...],
+                                        [box_0, box_1, ...],
+                                        [time_point_0, time_point_1, ...]]}
+        '''
+        if well_dict is None:
+            well_dict = {}
+        for result_index in range(len(roi)):
+                    total_rois = len(roi)
+                    well_name = f'{field_str}_well{result_index}'
+                    png_name = png_path.split('/')[-1]
+                    # time_point_index = png_path.find(self._time_point_id)
+                    # if time_point_index != -1:
+                    #     if self._time_point_leading_zero:
+                    #         time_point = png_path[time_point_index:time_point_index + 3]
+                    #     else:
+                    #         time_point = png_path[time_point_index:time_point_index + 2]
+                    if well_name not in well_dict:
+                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [total_rois]]
+                    else:
+                        well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
+                                                well_dict[well_name][1] + [box[result_index]],
+                                                well_dict[well_name][2] + [png_name], 
+                                                well_dict[well_name][3] + [total_rois]]
+                    if 'well0' in well_name:
+                        sum_boxes = [np.sum(box) for box in well_dict[well_name][1]]
+                        whole_image_dict['first_well_coords'] = sum_boxes
+        return well_dict, whole_image_dict
+
     def match_wells(self,
-                    whole_iamge_dict: dict) -> None:
+                    whole_image_dict: dict,
+                    well_dict: dict) -> None:
         '''
         Match wells across time points. If the well locations are not consistent across time points,\
         the user will be prompted to verify the discordance and given the opportunity to overwrite\
         the ROIs of the image that had an incorrect segmentation with the ROIs from the adjacent time point.\n
         Inputs:
             whole_image_dict: (dict) contains the field level information for the number of 
-            ROIs in each image for each time point, the png path to each image in the time series, 
-            and the sum of the bounding boxes for the ROI of the first well in each time point. 
-            This acts as a surrogate for the relative location of the wells. 
+                ROIs in each image for each time point, the png path to each image in the time series, 
+                and the sum of the bounding boxes for the ROI of the first well in each time point. 
+                The sum of the bounding box acts as a surrogate for the relative location of the wells. 
+            
+                The dictionary is a nested dictionary, structured as follows:
+                {'field_id_0': {"total_rois": [total_rois_0, total_rois_1, ...], 
+                                "png_path": [png_path_0, png_path_1, ...], 
+                                "first_well_coords": [sum_boxes_0, sum_boxes_1, ...]}}
+                
+                The nested structure exists because the entire nanowell is separated into 
+                fields of view at each time point. The goal of well matching is to ensure that 
+                the wells are segmented across the same location in each filed at each timepoint,
+                therefore, the sub-dictionary for each field contains information about all the 
+                images collected at different timepoints in a given field. 
+
+                'total_rois' is a list of the number of ROIs segmented in each image at each time point.
+                'png_path' is a list of the file paths to the images in the time series.
+                'first_well_coords' is a list of the sum of the bounding boxes for the first well in each time point.
+
+            well_dict: (dict) A dictionary containing the ROIs, bounding box coordinates, and time point identifier 
+                for each well across all time points. This dictionary is updated if the user decides to overwrite
+                the ROIs from a given field across timepoints with discordant segmentations. 
         Outputs:
-            None
+            rewrite: (bool) A boolean indicating whether the user has decided to overwrite the ROIs from a given field.
+            whole_image_dict: (dict) The updated dictionary containing the field level information for each time point.
         '''
         for field, vals in whole_image_dict.items():
             print(f'Checking field {field} for consistency across time points')
             total_rois = vals["total_rois"]
             png_paths = vals['png_path']
-            first_well = vals['first_well_coords']
+            first_well_box = vals['first_well_coords']
+            # Check if the number of ROIs is consistent across time points
             if not all(x == total_rois[0] for x in total_rois):
+            # If ROIs are not consistent, find the time points that are discordant
                 for i in range(len(total_rois)):
                     next((i for i, x in enumerate(total_rois[1:], 1) if x != total_rois[i-1]), -1)
                     print(f"Time point {i} has {total_rois[i]} ROIs")
+                    # Identify the paths to the images that are discordant
+                    plot_path_t1 = png_paths[i].replace('.png', '_validation.png')
+                    plot_path_t2 = png_paths[i+1].replace('.png', '_validation.png')
 
-            sum_boxes = [np.sum(box) for box in boxes]
+            sum_boxes = [np.sum(box) for box in first_well_box]
             for i, (current, next) in enumerate(zip(sum_boxes, sum_boxes[1:])):
                 if i < len(total_rois) - 1:
                     current_rois = total_rois[i]
-                    print("Current ROI: ", current_rois)
+                    print("Current Time Point: ", current_rois)
                     next_rois = total_rois[i+1]
-                    print("Next ROI: ", next_rois)
+                    print("Next Time Point: ", next_rois)
                     if i < 10:
                         time_point_1 = 'p0'+str(i)
                     if i+1 < 10:
@@ -209,7 +295,8 @@ class NanoExperiment(SamSegmenter):
                         # access validation plot images (from adjacent time points)
                         roi_path = self.generate_rois_params.get('roi_path')
                         validation_directory = roi_path + '/validation_plots'
-                        field_str = well[:3]
+                        # Need new field str source from 'field' key in whole_image_dict
+                        field_str = field[9:]
                         print("Time Points:" , time_point_1, time_point_2)
                         plot_path_t1 = find_files(validation_directory, field_str, 'validation', time_point_1)
                         plot_path_t2 = find_files(validation_directory, field_str, 'validation', time_point_2)
@@ -231,17 +318,20 @@ class NanoExperiment(SamSegmenter):
                                         f"If ROI {i+1} is incorrect, enter (2) to overwrite the ROIs with the ROIs from {i}.\n"
                                         "If no action should be taken, enter (0).\n")
                         # Response to user
+                        #TODO: Modify this to update the whole_image_dict, not the well_dict
                         if user_input == '1':
                             well_dict[well][0][i] = well_dict[well][0][i+1]
                             well_dict[well][1][i] = well_dict[well][1][i+1]
                             well_dict[well][2][i] = well_dict[well][2][i+1]
+                            rewrite = True
                         elif user_input == '2':
                             well_dict[well][0][i+1] = well_dict[well][0][i]
                             well_dict[well][1][i+1] = well_dict[well][1][i]
                             well_dict[well][2][i+1] = well_dict[well][2][i]
+                            rewrite = True
                         else:
                             continue
-        return None
+        return rewrite, whole_image_dict
 
     def segment_nanowells(self, 
                           model_path: str = None, 
@@ -310,7 +400,6 @@ class NanoExperiment(SamSegmenter):
             roi_path = self._experiment_path + '/ROI'
         else: 
             roi_path = output_directory + '/ROI'
-        well_dict = {}
         if not os.path.exists(roi_path):
             os.makedirs(roi_path)
         # Get path to image for segmentation
@@ -347,31 +436,27 @@ class NanoExperiment(SamSegmenter):
                 roi, box = segmentation.generate_rois(**self.generate_rois_params)
                 whole_image_dict[field_str]["total_rois"].append(len(roi))
                 whole_image_dict[field_str]["png_path"].append(png_path)
+                whole_image_dict[field_str]['all_rois'] = roi
+                whole_image_dict[field_str]['all_boxes'] = box
                 # Save ROIs and boxes in dictionary for each well
-                for result_index in range(len(roi)):
-                    total_rois = len(roi)
-                    well_name = f'{field_str}_well{result_index}'
-                    png_name = png_path.split('/')[-1]
-                    # time_point_index = png_path.find(self._time_point_id)
-                    # if time_point_index != -1:
-                    #     if self._time_point_leading_zero:
-                    #         time_point = png_path[time_point_index:time_point_index + 3]
-                    #     else:
-                    #         time_point = png_path[time_point_index:time_point_index + 2]
-                    if well_name not in well_dict:
-                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [total_rois]]
-                    else:
-                        well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
-                                                well_dict[well_name][1] + [box[result_index]],
-                                                well_dict[well_name][2] + [png_name], 
-                                                well_dict[well_name][3] + [total_rois]]
-                    if 'well0' in well_name:
-                        sum_boxes = [np.sum(box) for box in well_dict[well_name][1]]
-                        whole_image_dict['first_well_coords'] = sum_boxes
+                well_dict, whole_image_dict = self.generate_well_dict(len(roi), 
+                                                                      field_str, 
+                                                                      png_path, 
+                                                                      roi, 
+                                                                      box, 
+                                                                      whole_image_dict)
         # Perform well-matching. If well locations are not consistent across time points,
         # the user will be prompted to verify the discordance.
         if self.generate_rois_params.get('well_matching'):
-            self.match_wells(well_dict)
+            rewrite, whole_image_dict = self.match_wells(whole_image_dict, well_dict)
+            if rewrite:
+                well_dict = self.generate_well_dict(len(roi), 
+                                                    field_str, 
+                                                    png_path, 
+                                                    roi, 
+                                                    box, 
+                                                    whole_image_dict, 
+                                                    well_dict)
         return whole_image_dict
 
 
