@@ -506,23 +506,25 @@ class NanoExperiment(SamSegmenter):
         if not os.path.exists(cropped_tif_image_path):
             os.makedirs(cropped_tif_image_path)
         
-        for i in enumerate(self._num_channels):
+        for i in range(self._num_channels):
             for field_id_well_id, well_info in self.well_dict:
                 # Create directory for each field and channel
                 field_channel_path = cropped_tif_image_path + '/' + field_id_well_id[:3] + self._channel_id + i
+                # Get original TIF image path
+                tif_path = self._experiment_path + '/' + field_id_well_id[:3] + self._channel_id + i + '/' + png_path.rstrip('.png') + '.TIF'
                 if not os.path.exists(field_channel_path):
                         os.makedirs(field_channel_path)
-                
+                # Select the well-level information
                 for i, box in enumerate(well_info[1]):
                     # Create image path
                     png_path = well_info[2][i]
-                    tif_path = cropped_tif_image_path + '/' + field_id_well_id[:3] + self._channel_id + i + '/' + png_path.rstrip('.png') + '.TIF'
+                    field_channel_well_path = field_channel_path + '/' + field_id_well_id[3:]
                     im = np.array(Image.open(tif_path))
+                    cropped_tif_path = field_channel_well_path + '/' + png_path.rstrip('.png') + '.TIF'
                     box = well_info[1][i]
                     cropped_im = im.crop(box)
-                    #TODO: Finish updating these paths!
-                    cropped_tif_path = cropped_tif_image_path + f'/{field}/{field_id_well_id}/{tif_path}'
-                    if not os.path.exists(cropped_tif_image_path + f'/{field}/{field_id_well_id}'):
-                        os.makedirs(cropped_tif_image_path + f'/{field}/{field_id_well_id}')
+                    # Create a directory for each well 
+                    if not os.path.exists(field_channel_well_path):
+                        os.makedirs(field_channel_well_path)
                     cropped_im.save(cropped_tif_path)
         return None
