@@ -1,7 +1,9 @@
 import os
 import numpy as np
 import fnmatch
+import read_roi
 import attiicc as ac
+import cv2
 from attiicc.segmentation import SamSegmenter
 from experiment_utils import convert_tif_to_png, find_files, generate_comparison_plot
 from PIL import Image
@@ -499,32 +501,42 @@ class NanoExperiment(SamSegmenter):
                             image_time_point_id_1_well_id_0.tif
                         ...
         '''
+        segment_channel = str(self._channel_id) + str(self._segment_channel)
         if output_directory is None:
             cropped_tif_image_path = self._experiment_path + '/cropped_tif_images'
         else:
             cropped_tif_image_path = output_directory + '/cropped_tif_images'
         if not os.path.exists(cropped_tif_image_path):
             os.makedirs(cropped_tif_image_path)
-        
+        # Channels are indexed from 0
         for i in range(self._num_channels):
-            for field_id_well_id, well_info in self.well_dict:
+            print('Channel: ', i)
+            for field_id_well_id, well_info in self.well_dict.items():
+                print("Field ID and Well ID: ", field_id_well_id)
                 # Create directory for each field and channel
-                field_channel_path = cropped_tif_image_path + '/' + field_id_well_id[:3] + self._channel_id + i
+                field_channel_path = cropped_tif_image_path + '/' + field_id_well_id[:3] + self._channel_id + str(i)
                 # Get original TIF image path
-                tif_path = self._experiment_path + '/' + field_id_well_id[:3] + self._channel_id + i + '/' + png_path.rstrip('.png') + '.TIF'
                 if not os.path.exists(field_channel_path):
                         os.makedirs(field_channel_path)
                 # Select the well-level information
-                for i, box in enumerate(well_info[1]):
+                for j, roi in enumerate(well_info[0]):
                     # Create image path
-                    png_path = well_info[2][i]
-                    field_channel_well_path = field_channel_path + '/' + field_id_well_id[3:]
-                    im = np.array(Image.open(tif_path))
-                    cropped_tif_path = field_channel_well_path + '/' + png_path.rstrip('.png') + '.TIF'
-                    box = well_info[1][i]
-                    cropped_im = im.crop(box)
-                    # Create a directory for each well 
+                    # The channel will need to be changed, because the pngs were generated from the brightfield channel
+                    png_path = well_info[2][j]
+                    png_path = png_path.replace(segment_channel, str(self._channel_id) + str(i))
+                    print('PNG PATH: ', png_path)
+                    field_channel_well_path = field_channel_path + '/' + field_id_well_id[4:]
                     if not os.path.exists(field_channel_well_path):
                         os.makedirs(field_channel_well_path)
-                    cropped_im.save(cropped_tif_path)
+                    tif_path = self._experiment_path + '/' + field_id_well_id[:3] + self._channel_id + str(i) + '/' + png_path.rstrip('.png') + '.TIF'
+                    im = np.array(Image.open(tif_path))
+                    # TODO: Figure out a different cropping mechanism, this IS NOT WORKING
+                    cropped_tif_path = field_channel_well_path + '/' + png_path.rstrip('.png') + '.TIF'
+                    mask = np.zeros_like(im)
+                    coords = [well_info[0][j].integer_coordinates]
+                    cv2.fillPoly(mask, coords, 255)
+                    cropped_im = cv2.bitwise_and(im, mask)
+                    cv2.imwrite(cropped_tif_path, cropped_im)
+                    # Create a directory for each well 
+
         return None
