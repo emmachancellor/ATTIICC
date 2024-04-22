@@ -4,7 +4,7 @@ import fnmatch
 import attiicc as ac
 from attiicc.segmentation import SamSegmenter
 from experiment_utils import convert_tif_to_png, find_files, generate_comparison_plot
-
+from PIL import Image
 class NanoExperiment(SamSegmenter):
     '''Apply segmentation functions to an experiment with multiple channels, 
     fields of view, and time points.
@@ -29,6 +29,8 @@ class NanoExperiment(SamSegmenter):
             segment_channel: int = None,
             field_leading_zero: bool = False,
             time_point_leading_zero: bool = False,
+            well_dict: dict = None,
+            whole_image_dict: dict = None,
             **kwargs # For SamSegmenter
     ) -> None:
         '''Initialize a NanoExperiment object.
@@ -85,6 +87,8 @@ class NanoExperiment(SamSegmenter):
         self._num_time_points = num_time_points
         self._field_leading_zero = field_leading_zero
         self._time_point_leading_zero = time_point_leading_zero
+        self.well_dict = well_dict
+        self.whole_image_dict = whole_image_dict
         self.structure = f'Experiment Structure \n\
             segment_channel: {self._segment_channel} \n\
             field_id: {self._field_id} \n\
@@ -475,16 +479,24 @@ class NanoExperiment(SamSegmenter):
                                                     box, 
                                                     whole_image_dict, 
                                                     well_dict)
+        self.well_dict = well_dict
+        self.whole_image_dict = whole_image_dict
         return whole_image_dict, well_dict
 
 
-    def crop_nanowells(self, output_directory: str = None):
+    def crop_nanowells(self,
+                       output_directory: str = None):
         '''
+        Crops the images well-wise across time points for an experiment to create a new directory for
+        each well across time points. The cropped images will be saved in the output directory.
+        Note that this function will crop all channels, as defined in the NanoExperiment.
+
             output_directory/
                 cropped_tif_images/
-                    field_id_0_channel_id_0_well_id_0/
-                        image_time_point_id_0_well_id_0.tif 
-                        image_time_point_id_1_well_id_0.tif
+                    field_id_0_channel_id_d0/
+                        field_id_0_channel_id_0_well_id_0/
+                            image_time_point_id_0_well_id_0.tif 
+                            image_time_point_id_1_well_id_0.tif
                         ...
         '''
         if output_directory is None:
@@ -493,6 +505,24 @@ class NanoExperiment(SamSegmenter):
             cropped_tif_image_path = output_directory + '/cropped_tif_images'
         if not os.path.exists(cropped_tif_image_path):
             os.makedirs(cropped_tif_image_path)
-
-        pass
+        
+        for i in enumerate(self._num_channels):
+            for field_id_well_id, well_info in self.well_dict:
+                # Create directory for each field and channel
+                field_channel_path = cropped_tif_image_path + '/' + field_id_well_id[:3] + self._channel_id + i
+                if not os.path.exists(field_channel_path):
+                        os.makedirs(field_channel_path)
+                
+                for i, box in enumerate(well_info[1]):
+                    # Create image path
+                    png_path = well_info[2][i]
+                    tif_path = cropped_tif_image_path + '/' + field_id_well_id[:3] + self._channel_id + i + '/' + png_path.rstrip('.png') + '.TIF'
+                    im = np.array(Image.open(tif_path))
+                    box = well_info[1][i]
+                    cropped_im = im.crop(box)
+                    #TODO: Finish updating these paths!
+                    cropped_tif_path = cropped_tif_image_path + f'/{field}/{field_id_well_id}/{tif_path}'
+                    if not os.path.exists(cropped_tif_image_path + f'/{field}/{field_id_well_id}'):
+                        os.makedirs(cropped_tif_image_path + f'/{field}/{field_id_well_id}')
+                    cropped_im.save(cropped_tif_path)
         return None
