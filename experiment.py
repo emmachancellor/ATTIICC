@@ -4,9 +4,9 @@ import fnmatch
 import read_roi
 import attiicc as ac
 import cv2
+import imagej
 from attiicc.segmentation import SamSegmenter
 from experiment_utils import convert_tif_to_png, find_files, generate_comparison_plot
-from PIL import Image
 class NanoExperiment(SamSegmenter):
     '''Apply segmentation functions to an experiment with multiple channels, 
     fields of view, and time points.
@@ -471,7 +471,8 @@ class NanoExperiment(SamSegmenter):
                                                                       well_dict)
         # Perform well-matching. If well locations are not consistent across time points,
         # the user will be prompted to verify the discordance.
-        if self.generate_rois_params.get('well_matching'):
+        if self.generate_rois_params.get('well_match') is True:
+            print("Matching wells across time points")
             rewrite, whole_image_dict = self.match_wells(whole_image_dict, well_dict)
             if rewrite:
                 well_dict = self.generate_image_dicts(len(roi), 
@@ -486,6 +487,8 @@ class NanoExperiment(SamSegmenter):
         return whole_image_dict, well_dict
 
 
+
+#TODO -- START OVER...
     def crop_nanowells(self,
                        output_directory: str = None):
         '''
@@ -520,23 +523,49 @@ class NanoExperiment(SamSegmenter):
                         os.makedirs(field_channel_path)
                 # Select the well-level information
                 for j, roi in enumerate(well_info[0]):
+                    print("Methods and Properties:")
+                    print(dir(roi))
                     # Create image path
                     # The channel will need to be changed, because the pngs were generated from the brightfield channel
                     png_path = well_info[2][j]
+                    # Change the channel in the image path
                     png_path = png_path.replace(segment_channel, str(self._channel_id) + str(i))
                     print('PNG PATH: ', png_path)
                     field_channel_well_path = field_channel_path + '/' + field_id_well_id[4:]
                     if not os.path.exists(field_channel_well_path):
                         os.makedirs(field_channel_well_path)
-                    tif_path = self._experiment_path + '/' + field_id_well_id[:3] + self._channel_id + str(i) + '/' + png_path.rstrip('.png') + '.TIF'
-                    im = np.array(Image.open(tif_path))
+                    og_tif_path = self._experiment_path + '/' + field_id_well_id[:3] + self._channel_id + str(i) + '/' + png_path.rstrip('.png') + '.TIF'
+                    print('Original TIF path: ', og_tif_path)
                     # TODO: Figure out a different cropping mechanism, this IS NOT WORKING
                     cropped_tif_path = field_channel_well_path + '/' + png_path.rstrip('.png') + '.TIF'
-                    mask = np.zeros_like(im)
-                    coords = [well_info[0][j].integer_coordinates]
-                    cv2.fillPoly(mask, coords, 255)
-                    cropped_im = cv2.bitwise_and(im, mask)
-                    cv2.imwrite(cropped_tif_path, cropped_im)
-                    # Create a directory for each well 
-
+                    # initialize imagej
+                    ij = imagej.init('sc.fiji:fiji')
+                    # load image
+                    image = ij.io().open(og_tif_path)
+                    if not isinstance(image, ImgPlus):
+                        image = ImgPlus(image)
+                    # get roi as rectangle
+                    x = int(roi.left)
+                    y = int(roi.top)
+                    width = int(roi.widthd)
+                    height = int(roi.heightd)
+                    # Calculate max coordinates
+                    x_max = x + width - 1
+                    y_max = y + height - 1
+                    # Create Java long arrays from Python lists
+                    start = JArray(JLong)([x, y])
+                    end = JArray(JLong)([x_max, y_max])
+                    # Create interval
+                    interval = FinalInterval(start, end)
+                    # crop image
+                    cropped_im = ij.op().run("net.imagej.ops.transform.crop.CropImgPlus", image, interval, False)
+                    # Save TIF
+                    ij.io().save(cropped_im, cropped_tif_path)
+                    # Save png
+                    cropped_png_path = field_channel_well_path + '/' + png_path
+                    ij.io.save(cropped_im, cropped_png_path)
+                    # Clean up
+                    ij.dispose()
         return None
+    
+    

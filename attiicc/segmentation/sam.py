@@ -318,7 +318,6 @@ class SamSegmenter:
                       print_plot:bool = False,
                       validation_path:bool = None,
                       save_heatmap: bool = False,
-                      well_match: bool = False,
                       **kwargs) -> list:
         '''
         Generate ROIs from the segmentation results.
@@ -335,7 +334,7 @@ class SamSegmenter:
             validation_path (str, optional): Path to a directory to save validation plots
             save_heatmap (bool, optional): Whether to save a correlation heatmap of the centroid coordinates.
             well_match (bool, optional): Whether to enforce a match between the location of each well across
-                time points using the `well_matching` method in the NanoExperiment class. Default is False. 
+                time points using the `match_wells()` method in the NanoExperiment class. Default is False. 
         Outputs:
             roi_and_box_list: a list of lists containing the ROIs and the bounding boxes, sorted
                 in order by the y-coordinate of the centroid. The first list contains ROIs
@@ -398,7 +397,7 @@ class SamSegmenter:
                     for root, _, files in os.walk(new_path):
                         for file in files:
                             zipf.write(os.path.join(root, file), file)
-            if validation_plot or well_match:
+            if validation_plot:
                 # Load image
                 img = mpimg.imread(self._png_path)
                 print("Generating validation plot for ", self._png_path)
