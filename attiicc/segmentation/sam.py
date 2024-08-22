@@ -333,8 +333,6 @@ class SamSegmenter:
             print_plot (bool, optional): Whether to print the validation plot. Default is False.
             validation_path (str, optional): Path to a directory to save validation plots
             save_heatmap (bool, optional): Whether to save a correlation heatmap of the centroid coordinates.
-            well_match (bool, optional): Whether to enforce a match between the location of each well across
-                time points using the `match_wells()` method in the NanoExperiment class. Default is False. 
         Outputs:
             roi_and_box_list: a list of lists containing the ROIs and the bounding boxes, sorted
                 in order by the y-coordinate of the centroid. The first list contains ROIs

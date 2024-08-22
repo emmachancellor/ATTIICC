@@ -179,7 +179,8 @@ class NanoExperiment(SamSegmenter):
                                         roi: list,
                                         box: list,
                                         whole_image_dict = None,
-                                        well_dict = None) -> dict:
+                                        well_dict = None,
+                                        img_idx = None) -> dict:
         '''
         Updates a dictionary containing well information across each time point \
         for each field and update the whole_image_dict with the sum of the bounding boxes
@@ -187,7 +188,7 @@ class NanoExperiment(SamSegmenter):
 
         Inputs:
             total_rois: (int) The total number of ROIs segmented in the image.
-            field_str: (str) The field of view identifier.
+            field_str: (str) The field of view identifier. Derived from self._field_id.
             png_path: (str) The path to the image in the time series.
             roi: (list) A list of the ROIs segmented in the image.
             box: (list) A list of the bounding box coordinates for each ROI.
@@ -196,6 +197,7 @@ class NanoExperiment(SamSegmenter):
             well_dict: (dict) A dictionary containing the ROIs, bounding box coordinates,
                 and time point identifier for each well across all time points. Default is None.
                 If left as None, the function will initialize an empty dictionary.
+            img_idx: (int) The index of the image in the time series. Default is None.
         
         Outputs:
             well_dict (dict): A dictionary containing the ROIs, bounding box coordinates,
@@ -220,6 +222,22 @@ class NanoExperiment(SamSegmenter):
         '''
         if well_dict is None:
             well_dict = {}
+        # Uses the number of ROIs to sequentially number the wells
+        # TODO: Revise this so that the well numbering is consistent across time points
+        # based on the location of the wells in the image
+        # TODO: Need to reference the previous time point to check the well numbering
+        # This will require either a new function or additional input parameters for this function
+        
+        # Check that the well locations are consistent across time points
+        '''
+        if img_idx > 0:
+            # Get the entry for the last added well
+            last_added_well = next(reversed(well_dict))
+            last_entry = well_dict[last_added_well]
+            number_of_wells = len(last_entry[0])
+            well_name = f'{field_str}_well{result_index}'
+        '''
+        
         for result_index in range(len(roi)):
                     total_rois = len(roi)
                     well_name = f'{field_str}_well{result_index}'
@@ -241,7 +259,7 @@ class NanoExperiment(SamSegmenter):
                                 "first_well_coords": fist_well_sum_boxes}
         return well_dict, whole_image_dict
 
-    def match_wells(self,
+    def match_wells_v1(self,
                     whole_image_dict: dict,
                     well_dict: dict) -> None:
         '''
@@ -352,6 +370,13 @@ class NanoExperiment(SamSegmenter):
                 continue
         return rewrite, whole_image_dict
 
+    def match_wells(self,
+                    whole_image_dict: dict,
+                    well_dict: dict) -> None:
+        pass
+
+        return
+
     def segment_nanowells(self, 
                           model_path: str = None, 
                           model_type: str = 'vit_h', 
@@ -450,6 +475,8 @@ class NanoExperiment(SamSegmenter):
                     Please convert the .TIF images to .png using the convert_png parameter.')
             # With PNG images, segment nanowells in images
             begin_segmenting = True
+            # Segment images at the single image level and iteratively update the
+            # whole_image_dict and well_dict
             for i, j in enumerate(os.listdir(png_image_directory_path)):
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
@@ -468,7 +495,8 @@ class NanoExperiment(SamSegmenter):
                                                                       roi, 
                                                                       box, 
                                                                       whole_image_dict,
-                                                                      well_dict)
+                                                                      well_dict,
+                                                                      img_idx=i)
         # Perform well-matching. If well locations are not consistent across time points,
         # the user will be prompted to verify the discordance.
         if self.generate_rois_params.get('well_match') is True:
