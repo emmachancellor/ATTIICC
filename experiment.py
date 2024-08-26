@@ -180,7 +180,8 @@ class NanoExperiment(SamSegmenter):
                                         box: list,
                                         whole_image_dict = None,
                                         well_dict = None,
-                                        img_idx = None) -> dict:
+                                        img_idx = None,
+                                        well_location_tolerance = 5) -> dict:
         '''
         Updates a dictionary containing well information across each time point \
         for each field and update the whole_image_dict with the sum of the bounding boxes
@@ -198,6 +199,9 @@ class NanoExperiment(SamSegmenter):
                 and time point identifier for each well across all time points. Default is None.
                 If left as None, the function will initialize an empty dictionary.
             img_idx: (int) The index of the image in the time series. Default is None.
+            well_location_tolerance: (int) The allowed difference in the centroid of the bounding box
+                of a given well and the bounding box of the same well in the previous time point.
+                Default is 5 pixels.
         
         Outputs:
             well_dict (dict): A dictionary containing the ROIs, bounding box coordinates,
@@ -229,28 +233,29 @@ class NanoExperiment(SamSegmenter):
         # This will require either a new function or additional input parameters for this function
         
         # Check that the well locations are consistent across time points
-        '''
         if img_idx > 0:
             # Get the entry for the last added well
             last_added_well = next(reversed(well_dict))
             last_entry = well_dict[last_added_well]
-            number_of_wells = len(last_entry[0])
+            number_of_wells = len(last_entry[3])
             well_name = f'{field_str}_well{result_index}'
-        '''
         
+        # Iterate over all ROIs, but must match each ROI to the correct well via pixel location
         for result_index in range(len(roi)):
-                    total_rois = len(roi)
-                    well_name = f'{field_str}_well{result_index}'
-                    png_name = png_path.split('/')[-1]
-                    if well_name not in well_dict:
-                        well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [total_rois]]
-                    else:
-                        well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
-                                                well_dict[well_name][1] + [box[result_index]],
-                                                well_dict[well_name][2] + [png_name], 
-                                                well_dict[well_name][3] + [total_rois]]
-                    if 'well0' in well_name:
-                        fist_well_sum_boxes = [np.sum(box) for box in well_dict[well_name][1]]
+            # Calculate the centroid of the bounding box
+            bbox_centroid = np.mean(box[result_index])
+            total_rois = len(roi)
+            well_name = f'{field_str}_well{result_index}'
+            png_name = png_path.split('/')[-1]
+            if well_name not in well_dict:
+                well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [total_rois]]
+            else:
+                well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
+                                        well_dict[well_name][1] + [box[result_index]],
+                                        well_dict[well_name][2] + [png_name], 
+                                        well_dict[well_name][3] + [total_rois]]
+            if 'well0' in well_name:
+                fist_well_sum_boxes = [np.sum(box) for box in well_dict[well_name][1]]
         if whole_image_dict is None:
             whole_image_dict = {}
         if field_str not in whole_image_dict:
@@ -449,6 +454,9 @@ class NanoExperiment(SamSegmenter):
         self.generate_rois_params = kwargs.get('generate_rois_params', {})
         self.plot_segmented_image_params = kwargs.get('plot_segmented_image_params', {})
         self.plot_masks_params = kwargs.get('plot_masks_params', {})
+        # Extract well_location_tolerance to specify the allowed difference in the centroid of the bounding box
+        # between well locations in adjacent time points. Default is 5 pixels.
+        well_location_tolerance = kwargs.get('well_location_tolerance', 5)
         if output_directory is None:
             roi_path = self._experiment_path + '/ROI'
         else: 
@@ -488,7 +496,7 @@ class NanoExperiment(SamSegmenter):
                     begin_segmenting = False
                 else: # If SamSegmenter instance already exists, update the image path, don't need to re-load SAM model
                     segmentation.update_image(png_path, tif_path)
-                roi, box = segmentation.generate_rois(**self.generate_rois_params)
+                roi, box, centroids = segmentation.generate_rois(**self.generate_rois_params)
                 well_dict, whole_image_dict = self.generate_image_dicts(len(roi), 
                                                                       field_str, 
                                                                       png_path, 
@@ -496,9 +504,11 @@ class NanoExperiment(SamSegmenter):
                                                                       box, 
                                                                       whole_image_dict,
                                                                       well_dict,
-                                                                      img_idx=i)
+                                                                      img_idx=i,
+                                                                      well_location_tolerance=well_location_tolerance)
         # Perform well-matching. If well locations are not consistent across time points,
         # the user will be prompted to verify the discordance.
+        # TODO: Modify to be consistent with the new well_matching() logic
         if self.generate_rois_params.get('well_match') is True:
             print("Matching wells across time points")
             rewrite, whole_image_dict = self.match_wells(whole_image_dict, well_dict)
@@ -509,7 +519,9 @@ class NanoExperiment(SamSegmenter):
                                                     roi, 
                                                     box, 
                                                     whole_image_dict, 
-                                                    well_dict)
+                                                    well_dict,
+                                                    img_idx=i,
+                                                    well_location_tolerance=well_location_tolerance)
         self.well_dict = well_dict
         self.whole_image_dict = whole_image_dict
         return whole_image_dict, well_dict

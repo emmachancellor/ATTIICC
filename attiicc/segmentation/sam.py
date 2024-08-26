@@ -318,6 +318,7 @@ class SamSegmenter:
                       print_plot:bool = False,
                       validation_path:bool = None,
                       save_heatmap: bool = False,
+                      filter_duplicates: bool = False,
                       **kwargs) -> list:
         '''
         Generate ROIs from the segmentation results.
@@ -334,15 +335,17 @@ class SamSegmenter:
             validation_path (str, optional): Path to a directory to save validation plots
             save_heatmap (bool, optional): Whether to save a correlation heatmap of the centroid coordinates.
         Outputs:
-            roi_and_box_list: a list of lists containing the ROIs and the bounding boxes, sorted
-                in order by the y-coordinate of the centroid. The first list contains ROIs
-                and the second list contains lists of the box coordinates in XYWH format.
+            roi_and_box_and_centroid_list: a list of lists containing the ROIs and the bounding boxes, sorted
+                in order by the y-coordinate of the centroid, and the (X,Y) coordinates of the centroid. 
+                The first list contains ROIs and the second list contains lists of the box coordinates in XYWH format.
+                The third list is a list of tuples containing the centroid coordinates.
         '''
         image_name = os.path.basename(self._png_path).rstrip(".png")
         seg_num = 1
         centroid_list = []
         roi_list = []
         box_list = []
+        centroid_list = []
         coordinate_dict = {}
         for seg, box in zip(self.segmentation, self.bbox):
             binary_image = np.uint8(seg) * 255
@@ -357,27 +360,31 @@ class SamSegmenter:
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
                         coords_id = [cX, cY]
-                        coordinate_dict[(cX, cY)] = [roi, seg_num, box]
+                        coordinate_dict[(cX, cY)] = [roi, seg_num, box, (cX, cY)]
                         centroid_list.append(coords_id)
             seg_num += 1
         # Sort the list of lists by the value at index 0
         centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
-        # Remove duplicates
-        print("Total number of ROIs before filtering: ", len(centroid_list_sorted))
-        print("Filtering for duplicates...")
-        filtered_coordinates = self._filter_duplicate_masks(centroid_list_sorted,
-                                            coordinate_dict,
-                                            filter_distance=filter_distance,
-                                            roi_path=roi_path,
-                                            save_heatmap=save_heatmap,
-                                            validation_path=validation_path)
-        print("Total number of ROIs after filtering: ", len(filtered_coordinates))
-        # Sort the list by y-coordinate
-        filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
+        if filter_duplicates is True:
+            # Remove duplicates
+            print("Total number of ROIs before filtering: ", len(centroid_list_sorted))
+            print("Filtering for duplicates...")
+            filtered_coordinates = self._filter_duplicate_masks(centroid_list_sorted,
+                                                coordinate_dict,
+                                                filter_distance=filter_distance,
+                                                roi_path=roi_path,
+                                                save_heatmap=save_heatmap,
+                                                validation_path=validation_path)
+            print("Total number of ROIs after filtering: ", len(filtered_coordinates))
+            # Sort the list by y-coordinate
+            filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
+        else: 
+            filtered_coordinates = centroid_list_sorted
         for i in filtered_coordinates:
             roi_list.append(coordinate_dict[tuple(i)][0])
             box_list.append(coordinate_dict[tuple(i)][2])
-        roi_and_box_list = [roi_list, box_list]
+            centroid_list.append(coordinate_dict[tuple(i)][3])
+        roi_and_box_and_centroid_list = [roi_list, box_list, centroid_list]
         if roi_path is not None:
             print("Saving ROIs to: ", roi_path+'/'+image_name)
             new_path = os.path.join(roi_path, image_name)
@@ -417,5 +424,5 @@ class SamSegmenter:
                 if print_plot:
                     plt.show()
                 plt.close()
-        return roi_and_box_list
+        return roi_and_box_and_centroid_list
     
