@@ -178,6 +178,7 @@ class NanoExperiment(SamSegmenter):
                                         png_path: str,
                                         roi: list,
                                         box: list,
+                                        centroids: list,
                                         whole_image_dict = None,
                                         well_dict = None,
                                         img_idx = None,
@@ -193,6 +194,7 @@ class NanoExperiment(SamSegmenter):
             png_path: (str) The path to the image in the time series.
             roi: (list) A list of the ROIs segmented in the image.
             box: (list) A list of the bounding box coordinates for each ROI.
+            centroids: (list) A list of the centroids for each well ROI.
             whole_image_dict: (dict) A dictionary containing the field level information 
                 for each nanowell image.
             well_dict: (dict) A dictionary containing the ROIs, bounding box coordinates,
@@ -225,43 +227,47 @@ class NanoExperiment(SamSegmenter):
                                 "first_well_coords": [sum_boxes]}
         '''
         if well_dict is None:
-            well_dict = {}
-        # Uses the number of ROIs to sequentially number the wells
-        # TODO: Revise this so that the well numbering is consistent across time points
-        # based on the location of the wells in the image
-        # TODO: Need to reference the previous time point to check the well numbering
-        # This will require either a new function or additional input parameters for this function
-        
-        # Check that the well locations are consistent across time points
-        if img_idx > 0:
-            # Get the entry for the last added well
-            last_added_well = next(reversed(well_dict))
-            last_entry = well_dict[last_added_well]
-            number_of_wells = len(last_entry[3])
-            well_name = f'{field_str}_well{result_index}'
-        
+            well_dict = {}        
         # Iterate over all ROIs, but must match each ROI to the correct well via pixel location
+        well_number = 0
         for result_index in range(len(roi)):
-            # Calculate the centroid of the bounding box
-            bbox_centroid = np.mean(box[result_index])
             total_rois = len(roi)
-            well_name = f'{field_str}_well{result_index}'
+            well_name = f'{field_str}_well{well_number}'
+            potential_duplicate_well_name = f'{field_str}_well{well_number-1}'
             png_name = png_path.split('/')[-1]
             if well_name not in well_dict:
                 well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [total_rois]]
             else:
+                # Check if the centroid of the last entry is in the same location as the current ROI
+                x_1, y_1 = well_dict[well_name][3][-1]
+                last_timepoint_location_sum = x_1 + y_1
+                x_2, y_2 = centroids[result_index]
+                current_timepoint_location_sum = x_2 + y_2
+                if abs(current_timepoint_location_sum - last_timepoint_location_sum) > well_location_tolerance:
+                    # Check if the mis-match is due to a duplicate well
+                    if well_dict[well_name][3][-1] == well_dict[potential_duplicate_well_name][3][-1]:
+                        print(f'Well {well_name} is a duplicate of {potential_duplicate_well_name}.')
+                    print(f'Well {well_name} has moved more than {well_location_tolerance} pixels from the previous time point.')
+                    print(f'Last time point location: {last_timepoint_location_sum}')
+                    print(f'Current time point location: {current_timepoint_location_sum}')
+                    print('Please verify the well location and update the ROI if necessary.')
+                    response = input(f"Do you want to add this well as a timepoint for {well_name}? (y/n): ")
+                    if response.lower() != "y":
+                        continue
+                    if response.lower() == "y":
+                        print("Adding well information to dictionary.")
                 well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
                                         well_dict[well_name][1] + [box[result_index]],
                                         well_dict[well_name][2] + [png_name], 
-                                        well_dict[well_name][3] + [total_rois]]
-            if 'well0' in well_name:
-                fist_well_sum_boxes = [np.sum(box) for box in well_dict[well_name][1]]
+                                        well_dict[well_name][3] + [centroids[result_index]]]
+            # Only increment the well number if a well is added to the dictionary
+            # Don't want to increment the well if the ROI does not belong to a full well or duplicate well
+            well_number += 1
         if whole_image_dict is None:
             whole_image_dict = {}
         if field_str not in whole_image_dict:
                         whole_image_dict[field_str] = {"total_rois": [total_rois],
-                                "png_path": [png_path],
-                                "first_well_coords": fist_well_sum_boxes}
+                                "png_path": [png_path]}
         return well_dict, whole_image_dict
 
     def match_wells_v1(self,
@@ -484,7 +490,7 @@ class NanoExperiment(SamSegmenter):
             # With PNG images, segment nanowells in images
             begin_segmenting = True
             # Segment images at the single image level and iteratively update the
-            # whole_image_dict and well_dict
+            # whole_image_dict and well_dict for each time point
             for i, j in enumerate(os.listdir(png_image_directory_path)):
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
@@ -518,6 +524,7 @@ class NanoExperiment(SamSegmenter):
                                                     png_path, 
                                                     roi, 
                                                     box, 
+                                                    centroids,
                                                     whole_image_dict, 
                                                     well_dict,
                                                     img_idx=i,
