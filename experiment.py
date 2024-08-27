@@ -236,26 +236,33 @@ class NanoExperiment(SamSegmenter):
             potential_duplicate_well_name = f'{field_str}_well{well_number-1}'
             png_name = png_path.split('/')[-1]
             if well_name not in well_dict:
-                well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [total_rois]]
+                well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [centroids[result_index]]]
+                print(f'Number of entries in well_dict: {len(well_dict)}')
+                print('Index: ', result_index)
             else:
+                print(f'Well {well_name} already exists in the dictionary.')
                 # Check if the centroid of the last entry is in the same location as the current ROI
                 x_1, y_1 = well_dict[well_name][3][-1]
+                print("Last time point centroid: ", x_1, y_1)
                 last_timepoint_location_sum = x_1 + y_1
                 x_2, y_2 = centroids[result_index]
                 current_timepoint_location_sum = x_2 + y_2
+                print(f'Difference between last and current timepoint: {abs(current_timepoint_location_sum - last_timepoint_location_sum)}')
                 if abs(current_timepoint_location_sum - last_timepoint_location_sum) > well_location_tolerance:
                     # Check if the mis-match is due to a duplicate well
-                    if well_dict[well_name][3][-1] == well_dict[potential_duplicate_well_name][3][-1]:
+                    print('Potential Duplicate Name: ', potential_duplicate_well_name)
+                    print('Well Name: ', well_name)
+                    if (well_number > 0) and (well_dict[well_name][3][-1] == well_dict[potential_duplicate_well_name][3][-1]):
                         print(f'Well {well_name} is a duplicate of {potential_duplicate_well_name}.')
-                    print(f'Well {well_name} has moved more than {well_location_tolerance} pixels from the previous time point.')
-                    print(f'Last time point location: {last_timepoint_location_sum}')
-                    print(f'Current time point location: {current_timepoint_location_sum}')
-                    print('Please verify the well location and update the ROI if necessary.')
-                    response = input(f"Do you want to add this well as a timepoint for {well_name}? (y/n): ")
-                    if response.lower() != "y":
-                        continue
-                    if response.lower() == "y":
-                        print("Adding well information to dictionary.")
+                    # print(f'Well {well_name} has moved more than {well_location_tolerance} pixels from the previous time point.')
+                    # print(f'Last time point location: {last_timepoint_location_sum}')
+                    # print(f'Current time point location: {current_timepoint_location_sum}')
+                    # print('Please verify the well location and update the ROI if necessary.')
+                    # response = input(f"Do you want to add this well as a timepoint for {well_name}? (y/n): ")
+                    # if response.lower() != "y":
+                    #     continue
+                    # if response.lower() == "y":
+                    #     print("Adding well information to dictionary.")
                 well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
                                         well_dict[well_name][1] + [box[result_index]],
                                         well_dict[well_name][2] + [png_name], 
@@ -507,7 +514,8 @@ class NanoExperiment(SamSegmenter):
                                                                       field_str, 
                                                                       png_path, 
                                                                       roi, 
-                                                                      box, 
+                                                                      box,
+                                                                      centroids, 
                                                                       whole_image_dict,
                                                                       well_dict,
                                                                       img_idx=i,

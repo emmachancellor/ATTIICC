@@ -411,6 +411,7 @@ class SamSegmenter:
                 plt.scatter(*zip(*filtered_coordinates), color='yellow', marker='o')
                 plt.title(f"Centroids for {image_name}")
                 # Annotate each point with its label
+                # TODO: Modify the label to be the assigned well name.
                 for (x, y), i in zip(filtered_coordinates, range(len(filtered_coordinates))):
                     plt.text(x, y, str(i), color='white')
                 if validation_path is None:
