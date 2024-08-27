@@ -241,17 +241,17 @@ class NanoExperiment(SamSegmenter):
                 print('Index: ', result_index)
             else:
                 print(f'Well {well_name} already exists in the dictionary.')
-                # Check if the centroid of the last entry is in the same location as the current ROI
+                Check if the centroid of the last entry is in the same location as the current ROI
                 x_1, y_1 = well_dict[well_name][3][-1]
                 print("Last time point centroid: ", x_1, y_1)
                 last_timepoint_location_sum = x_1 + y_1
                 x_2, y_2 = centroids[result_index]
                 current_timepoint_location_sum = x_2 + y_2
-                print(f'Difference between last and current timepoint: {abs(current_timepoint_location_sum - last_timepoint_location_sum)}')
+                #print(f'Difference between last and current timepoint: {abs(current_timepoint_location_sum - last_timepoint_location_sum)}')
                 if abs(current_timepoint_location_sum - last_timepoint_location_sum) > well_location_tolerance:
                     # Check if the mis-match is due to a duplicate well
-                    print('Potential Duplicate Name: ', potential_duplicate_well_name)
-                    print('Well Name: ', well_name)
+                    #print('Potential Duplicate Name: ', potential_duplicate_well_name)
+                    #print('Well Name: ', well_name)
                     if (well_number > 0) and (well_dict[well_name][3][-1] == well_dict[potential_duplicate_well_name][3][-1]):
                         print(f'Well {well_name} is a duplicate of {potential_duplicate_well_name}.')
                     # print(f'Well {well_name} has moved more than {well_location_tolerance} pixels from the previous time point.')

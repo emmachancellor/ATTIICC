@@ -345,7 +345,7 @@ class SamSegmenter:
         centroid_list = []
         roi_list = []
         box_list = []
-        centroid_list = []
+        centroid_coords_filtered = []
         coordinate_dict = {}
         for seg, box in zip(self.segmentation, self.bbox):
             binary_image = np.uint8(seg) * 255
@@ -377,14 +377,15 @@ class SamSegmenter:
                                                 validation_path=validation_path)
             print("Total number of ROIs after filtering: ", len(filtered_coordinates))
             # Sort the list by y-coordinate
-            filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
         else: 
             filtered_coordinates = centroid_list_sorted
+        filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
         for i in filtered_coordinates:
             roi_list.append(coordinate_dict[tuple(i)][0])
             box_list.append(coordinate_dict[tuple(i)][2])
-            centroid_list.append(coordinate_dict[tuple(i)][3])
-        roi_and_box_and_centroid_list = [roi_list, box_list, centroid_list]
+            centroid_coords_filtered.append(coordinate_dict[tuple(i)][3])
+            
+        roi_and_box_and_centroid_list = [roi_list, box_list, centroid_coords_filtered]
         if roi_path is not None:
             print("Saving ROIs to: ", roi_path+'/'+image_name)
             new_path = os.path.join(roi_path, image_name)
