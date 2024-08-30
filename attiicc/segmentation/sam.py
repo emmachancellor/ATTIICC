@@ -226,88 +226,118 @@ class SamSegmenter:
             if save:
                 plt.savefig(save_path)    
         return
-    
+
     def _filter_duplicate_masks(self, 
-                               centroid_list_sorted: list, 
-                               coordinate_dict: dict, 
-                               filter_distance: int,
-                               roi_path: str = None, 
-                               save_heatmap: str = False,
-                               validation_path: str = None) -> list:
+               centroid_list_sorted: list, 
+               coordinate_dict: dict, 
+               filter_distance: int,
+               roi_path: str = None, 
+               save_heatmap: bool = False,
+               validation_path: str = None) -> list:
         '''
-        Filter duplicate ROIs based on the distance between the centroids. \
+        Filter duplicate ROIs based on the distance between the centroids.
         Helper function for generate_rois.
-        Inputs:
-            centroid_list_sorted (list): A list of lists containing the centroid coordinates \
-                and the ROI. The list is sorted by the y-coordinate of the centroid.
-            coordinate_dict (dict): A dictionary containing the centroid coordinates as keys \
-                and the ROI and segmentation number as values.
-            filter_distance (int): The pixel distance to use for filtering. ROIs with centroids \
-                within this distance will be filtered out.
-            roi_path (str, optional): The path to a directory where ROIs can be saved. Default is None.
-            save_heatmap (bool, optional): Whether to save the heatmap. Default is False.
-            validation_path (str, optional): The path to save the validation plot. Default is None.
-        Outputs:
-            centroid_list_sorted (list): The filtered list of lists containing the centroid coordinates \
-                and the ROI. The list is sorted by the y-coordinate of the centroid.
         '''
-        remove_coords = set()
-        do_not_remove_coords = set()
-        seg_num_set = set()
-        matrix_coordinates = cp.array(centroid_list_sorted)
+        print(f"Initial number of ROIs: {len(centroid_list_sorted)}")
+        print(f"Filter distance: {filter_distance}")
+
+        # Remove exact duplicates first
+        unique_centroids = {}
+        for i, centroid in enumerate(centroid_list_sorted):
+            centroid_tuple = tuple(centroid)
+            if centroid_tuple in unique_centroids:
+                print(f"Removing exact duplicate centroid at index {i}: {centroid}")
+            else:
+                unique_centroids[centroid_tuple] = i
+
+        centroid_list_unique = [centroid_list_sorted[i] for i in unique_centroids.values()]
+        print(f"Number of ROIs after removing exact duplicates: {len(centroid_list_unique)}")
+
+        # Compute distance matrix
+        matrix_coordinates = cp.array(centroid_list_unique)
         difference = matrix_coordinates[:, cp.newaxis, :] - matrix_coordinates[cp.newaxis, :, :]
         sq_difference = cp.square(difference)
         distance_matrix = cp.sqrt(cp.sum(sq_difference, axis=2))
+
+        # Create a mask for pairs within filter_distance
         mask = distance_matrix <= filter_distance
-        indices = cp.nonzero(mask)
-        indices_np = [cp.asnumpy(idx) for idx in indices]
-        for i, j in zip(indices_np[0], indices_np[1]):
-            coord_i = tuple(centroid_list_sorted[i])
-            coord_j = tuple(centroid_list_sorted[j])
-            #print("Compare Coordinates: ", coord_i, coord_j)
-            seg_num_i = coordinate_dict[tuple(centroid_list_sorted[i])][1]
-            seg_num_j = coordinate_dict[tuple(centroid_list_sorted[j])][1]
-            if i < j and i not in do_not_remove_coords and j not in remove_coords and seg_num_i != seg_num_j:
-                print("Duplicate ROI found: ", coord_i, coord_j)
-                remove_coords.add(i)
-                seg_num_set.add(seg_num_i)
-                do_not_remove_coords.add(j)
-        # Removing coordinates from the original list
+
+        # Create sets to keep track of ROIs to remove and preserve
+        remove_coords = set()
+        preserve_coords = set()
+
+        n = len(centroid_list_unique)
+        for i in range(n):
+            if i in remove_coords:
+                continue
+            for j in range(i + 1, n):
+                if j in remove_coords:
+                    continue
+                if mask[i, j]:
+                    coord_i = tuple(centroid_list_unique[i])
+                    coord_j = tuple(centroid_list_unique[j])
+                    seg_num_i = coordinate_dict[coord_i][1]
+                    seg_num_j = coordinate_dict[coord_j][1]
+                    distance = distance_matrix[i, j].get()
+
+                    print(f"Potential duplicate: {coord_i} and {coord_j}, distance: {distance:.2f}, seg_nums: {seg_num_i}, {seg_num_j}")
+
+                    if distance < 1e-6:  # Consider as exact duplicate if distance is very small
+                        remove_coords.add(j)
+                        preserve_coords.add(i)
+                        print(f"Removing exact duplicate ROI at index {j} (seg_num: {seg_num_j})")
+                    elif seg_num_i != seg_num_j:
+                        if i not in preserve_coords:
+                            remove_coords.add(i)
+                            preserve_coords.add(j)
+                            print(f"Removing close ROI at index {i} (seg_num: {seg_num_i})")
+                        else:
+                            remove_coords.add(j)
+                            print(f"Removing close ROI at index {j} (seg_num: {seg_num_j})")
+                    else:
+                        preserve_coords.add(i)
+                        preserve_coords.add(j)
+                        print(f"Preserving ROIs at indices {i} and {j} due to same seg_num: {seg_num_i}")
+
+        # Removing coordinates from the filtered list
         if len(remove_coords) > 0:
-            print("Removing coordinates...", remove_coords)
+            print(f"Removing {len(remove_coords)} coordinates: {remove_coords}")
         else:
-            print("No coordinates to remove.")
-        centroid_list_filtered = [x for i, x in enumerate(centroid_list_sorted) if i not in remove_coords]
-        # Remove exact duplicates by turning the list of lists into a set of tuples
-        centroid_list_filtered = [tuple(x) for x in centroid_list_filtered]
-        len_before = len(centroid_list_filtered)
-        centroid_list_filtered = list(set(centroid_list_filtered))
-        len_after = len(centroid_list_filtered)
-        number_of_exact_duplicates = len_before - len_after
-        print(f"Removing {number_of_exact_duplicates} exact duplicates...")
-        # Convert back to a list of lists
-        centroid_list_filtered = [list(x) for x in centroid_list_filtered]
+            print("No additional coordinates to remove.")
+
+        centroid_list_filtered = [x for i, x in enumerate(centroid_list_unique) if i not in remove_coords]
+
+        print(f"Final number of ROIs: {len(centroid_list_filtered)} \n")
+
         # Save heatmap
         if save_heatmap:
-            plt.figure(figsize=(8, 6))
-            plt.imshow(distance_matrix.get(), cmap='viridis')
+            plt.figure(figsize=(12, 10))
+            plt.imshow(distance_matrix.get(), cmap='viridis', interpolation='nearest')
             plt.colorbar(label='Distance')
-            plt.title('Centroid Distance Heatmap Before Duplicate Removal')
+            plt.title('Centroid Distance Heatmap')
             plt.xlabel('Centroid Index')
             plt.ylabel('Centroid Index')
+
+            # Highlight removed ROIs
+            for idx in remove_coords:
+                plt.axhline(y=idx, color='r', linestyle='--', alpha=0.5)
+                plt.axvline(x=idx, color='r', linestyle='--', alpha=0.5)
+
             if validation_path is None:
                 image_name = os.path.basename(self._png_path).rstrip(".png")
                 validation_dir = os.path.join(roi_path, "validation_plots")
                 if not os.path.exists(validation_dir):
                     print("Making directory at: ", validation_dir)
                     os.makedirs(validation_dir)
-                plt.savefig(os.path.join(validation_dir, f"{image_name}_heatmap.png"))
+                save_path = os.path.join(validation_dir, f"{image_name}_heatmap.png")
             else:
-                plt.savefig(os.path.join(validation_dir, f"{image_name}_heatmap.png"))
-            print("Heatmap saved to: ", f'{validation_dir}/{image_name}_heatmap.png')
-            plt.show()
-        return centroid_list_filtered
+                save_path = os.path.join(validation_path, f"{image_name}_heatmap.png")
 
+            plt.savefig(save_path)
+            print(f"Heatmap saved to: {save_path}")
+            plt.close()
+
+        return centroid_list_filtered
 
     def generate_rois(self,
                       target_area: List[List[int]] = [11100,12000], 
@@ -375,7 +405,6 @@ class SamSegmenter:
                                                 roi_path=roi_path,
                                                 save_heatmap=save_heatmap,
                                                 validation_path=validation_path)
-            print("Total number of ROIs after filtering: ", len(filtered_coordinates))
             # Sort the list by y-coordinate
         else: 
             filtered_coordinates = centroid_list_sorted

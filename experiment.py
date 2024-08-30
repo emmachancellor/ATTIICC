@@ -173,16 +173,16 @@ class NanoExperiment(SamSegmenter):
         return print(self.structure)
 
     def generate_image_dicts(self,
-                                        total_rois: int, 
-                                        field_str: str,
-                                        png_path: str,
-                                        roi: list,
-                                        box: list,
-                                        centroids: list,
-                                        whole_image_dict = None,
-                                        well_dict = None,
-                                        img_idx = None,
-                                        well_location_tolerance = 5) -> dict:
+                            total_rois: int, 
+                            field_str: str,
+                            png_path: str,
+                            roi: list,
+                            box: list,
+                            centroids: list,
+                            whole_image_dict = None,
+                            well_dict = None,
+                            img_idx = None,
+                            well_location_tolerance = 15) -> dict:
         '''
         Updates a dictionary containing well information across each time point \
         for each field and update the whole_image_dict with the sum of the bounding boxes
@@ -228,173 +228,54 @@ class NanoExperiment(SamSegmenter):
         '''
         if well_dict is None:
             well_dict = {}        
-        # Iterate over all ROIs, but must match each ROI to the correct well via pixel location
         well_number = 0
         for result_index in range(len(roi)):
             total_rois = len(roi)
             well_name = f'{field_str}_well{well_number}'
-            potential_duplicate_well_name = f'{field_str}_well{well_number-1}'
             png_name = png_path.split('/')[-1]
             if well_name not in well_dict:
                 well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [centroids[result_index]]]
-                print(f'Number of entries in well_dict: {len(well_dict)}')
-                print('Index: ', result_index)
             else:
-                print(f'Well {well_name} already exists in the dictionary.')
-                # Check if the centroid of the last entry is in the same location as the current ROI
                 x_1, y_1 = well_dict[well_name][3][-1]
-                print(f"All locations for {well_name}: ", well_dict[well_name][3])
-                print(f"Last time point centroid: ", x_1, y_1)
                 last_timepoint_location_sum = x_1 + y_1
                 x_2, y_2 = centroids[result_index]
                 current_timepoint_location_sum = x_2 + y_2
-                #print(f'Difference between last and current timepoint: {abs(current_timepoint_location_sum - last_timepoint_location_sum)}')
                 if abs(current_timepoint_location_sum - last_timepoint_location_sum) > well_location_tolerance:
-                    # Check if the mis-match is due to a duplicate well
-                    print('Potential Duplicate Name: ', potential_duplicate_well_name)
-                    print('Well Name: ', well_name)
-                    if (well_number > 0) and (well_dict[well_name][3][-1] == well_dict[potential_duplicate_well_name][3][-1]):
-                        print(f'Well {well_name} is a duplicate of {potential_duplicate_well_name}.')
-                    # print(f'Well {well_name} has moved more than {well_location_tolerance} pixels from the previous time point.')
-                    # print(f'Last time point location: {last_timepoint_location_sum}')
-                    # print(f'Current time point location: {current_timepoint_location_sum}')
-                    # print('Please verify the well location and update the ROI if necessary.')
-                    # response = input(f"Do you want to add this well as a timepoint for {well_name}? (y/n): ")
-                    # if response.lower() != "y":
-                    #     continue
-                    # if response.lower() == "y":
-                    #     print("Adding well information to dictionary.")
+                    print(f'Well {well_name} has moved more than {well_location_tolerance} pixels from the previous time point.')
+                    print(f'Last time point location: {last_timepoint_location_sum}')
+                    print(f'Current time point location: {current_timepoint_location_sum}')
+                    # Search for a matching centroid from all centroids within the timpoint
+                    matching_centroid_index = None
+                    for i, (x, y) in enumerate(centroids):
+                        if abs((x + y) - last_timepoint_location_sum) <= well_location_tolerance:
+                            matching_centroid_index = i
+                            matching_location = x + y
+                            break
+                    
+                    if matching_centroid_index is not None:
+                        print(f"Found matching centroid at index {matching_centroid_index}, (time point location: {matching_location})")
+                        well_dict[well_name] = [well_dict[well_name][0] + [roi[matching_centroid_index]], 
+                                                well_dict[well_name][1] + [box[matching_centroid_index]],
+                                                well_dict[well_name][2] + [png_name], 
+                                                well_dict[well_name][3] + [centroids[matching_centroid_index]]]
+                        well_number += 1
+                        continue
+                    else:
+                        print(f"No matching centroid found for {well_name}. No ROI will be added at this time point.")
+                        well_number += 1
+                        continue
+                # If the centroid hasn't moved significantly, update the existing well
                 well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
                                         well_dict[well_name][1] + [box[result_index]],
                                         well_dict[well_name][2] + [png_name], 
                                         well_dict[well_name][3] + [centroids[result_index]]]
-            # Only increment the well number if a well is added to the dictionary
-            # Don't want to increment the well if the ROI does not belong to a full well or duplicate well
             well_number += 1
         if whole_image_dict is None:
             whole_image_dict = {}
         if field_str not in whole_image_dict:
-                        whole_image_dict[field_str] = {"total_rois": [total_rois],
-                                "png_path": [png_path]}
+            whole_image_dict[field_str] = {"total_rois": [total_rois],
+                                        "png_path": [png_path]}
         return well_dict, whole_image_dict
-
-    def match_wells_v1(self,
-                    whole_image_dict: dict,
-                    well_dict: dict) -> None:
-        '''
-        Match wells across time points. If the well locations are not consistent across time points,\
-        the user will be prompted to verify the discordance and given the opportunity to overwrite\
-        the ROIs of the image that had an incorrect segmentation with the ROIs from the adjacent time point.\n
-        Inputs:
-            whole_image_dict: (dict) contains the field level information for the number of 
-                ROIs in each image for each time point, the png path to each image in the time series, 
-                and the sum of the bounding boxes for the ROI of the first well in each time point. 
-                The sum of the bounding box acts as a surrogate for the relative location of the wells. 
-            
-                The dictionary is a nested dictionary, structured as follows:
-                {'field_id_0': {"total_rois": [total_rois_0, total_rois_1, ...], 
-                                "png_path": [png_path_0, png_path_1, ...], 
-                                "first_well_coords": [sum_boxes_0, sum_boxes_1, ...]}}
-                
-                The nested structure exists because the entire nanowell is separated into 
-                fields of view at each time point. The goal of well matching is to ensure that 
-                the wells are segmented across the same location in each filed at each timepoint,
-                therefore, the sub-dictionary for each field contains information about all the 
-                images collected at different timepoints in a given field. 
-
-                'total_rois' is a list of the number of ROIs segmented in each image at each time point.
-                'png_path' is a list of the file paths to the images in the time series.
-                'first_well_coords' is a list of the sum of the bounding boxes for the first well in each time point.
-
-            well_dict: (dict) A dictionary containing the ROIs, bounding box coordinates, and time point identifier 
-                for each well across all time points. This dictionary is updated if the user decides to overwrite
-                the ROIs from a given field across timepoints with discordant segmentations. 
-        Outputs:
-            rewrite: (bool) A boolean indicating whether the user has decided to overwrite the ROIs from a given field.
-            whole_image_dict: (dict) The updated dictionary containing the field level information for each time point.
-        '''
-        for field, vals in whole_image_dict.items():
-            print(f'Checking field {field} for consistency across time points')
-            total_rois = vals["total_rois"]
-            png_paths = vals['png_path']
-            #first_well_box = vals['first_well_coords']
-            # Check if the number of ROIs is consistent across time points
-            if not all(x == total_rois[0] for x in total_rois):
-            # If ROIs are not consistent, find the time points that are discordant
-                for i in range(len(total_rois)):
-                    next((i for i, x in enumerate(total_rois[1:], 1) if x != total_rois[i-1]), -1)
-                    print(f"Time point {i} has {total_rois[i]} ROIs")
-                    # Identify the paths to the images that are discordant
-                    time_point_1 = 'p'+str(i)
-                    time_point_2 = 'p'+str(i+1)
-                    plot_path_t1 = png_paths[i].replace('.png', '_validation.png')
-                    plot_path_t2 = png_paths[i+1].replace('.png', '_validation.png')
-
-            # sum_boxes = [np.sum(box) for box in first_well_box]
-            # for i, (current, next) in enumerate(zip(sum_boxes, sum_boxes[1:])):
-            #     if i < len(total_rois) - 1:
-            #         current_rois = total_rois[i]
-            #         print("Current Time Point: ", current_rois)
-            #         next_rois = total_rois[i+1]
-            #         print("Next Time Point: ", next_rois)
-            #         if i < 10:
-            #             time_point_1 = 'p0'+str(i)
-            #         if i+1 < 10:
-            #             time_point_2 = 'p0'+str(i+1)
-            #         else:
-            #             time_point_1 = 'p'+str(i)
-            #             time_point_2 = 'p'+str(i+1)
-            #         if abs(current - next) > 10 or current_rois != next_rois:
-            #             print(f"Box {i} is different than box {i+1} by more than 10 pixels")
-            #             # access validation plot images (from adjacent time points)
-            #             roi_path = self.generate_rois_params.get('roi_path')
-            #             validation_directory = roi_path + '/validation_plots'
-            #             # Need new field str source from 'field' key in whole_image_dict
-            #             field_str = field[9:]
-            #             print("Time Points:" , time_point_1, time_point_2)
-            #             plot_path_t1 = find_files(validation_directory, field_str, 'validation', time_point_1)
-            #             plot_path_t2 = find_files(validation_directory, field_str, 'validation', time_point_2)
-                        # Create comparison plot of the two images with labeled ROIs
-            print("Path 1: ", plot_path_t1)
-            print("Path 2: ", plot_path_t2)
-            roi_path = self.generate_rois_params.get('roi_path')
-            comparison_plot_path = roi_path + '/comparison_plots'
-            if len(plot_path_t1) > 0 and len(plot_path_t2) > 0:
-                generate_comparison_plot(plot_path_t1[0], 
-                                        plot_path_t2[0], 
-                                        field_of_view=field_str, 
-                                        time_point_1=time_point_1,
-                                        time_point_2=time_point_2, 
-                                        save_path=comparison_plot_path)
-            # User makes decision on whether to overwrite the ROIs of the image that had an incorrect segmentation
-            user_input = input("Please view discordant ROIs in the comparison plot.\n"
-                            "If working outside a Jupyter{ notebook, the comparison plot will be saved in the ROI directory.\n"
-                            f"If ROI {i} is incorrect, enter (1) to overwrite the ROIs with the ROIs from {i+1}.\n"
-                            f"If ROI {i+1} is incorrect, enter (2) to overwrite the ROIs with the ROIs from {i}.\n"
-                            "If no action should be taken, enter (0).\n")
-            # Response to user
-            #TODO: Modify this to update the whole_image_dict, not the well_dict
-            # 
-            if user_input == '1':
-                whole_image_dict[field][0][i] = whole_image_dict[field][0][i+1]
-                whole_image_dict[field][1][i] = whole_image_dict[field][1][i+1]
-                whole_image_dict[field][2][i] = whole_image_dict[field][2][i+1]
-                rewrite = True
-            elif user_input == '2':
-                whole_image_dict[field][0][i+1] = whole_image_dict[field][0][i]
-                whole_image_dict[field][1][i+1] = whole_image_dict[field][1][i]
-                whole_image_dict[field][2][i+1] = whole_image_dict[field][2][i]
-                rewrite = True
-            else:
-                continue
-        return rewrite, whole_image_dict
-
-    def match_wells(self,
-                    whole_image_dict: dict,
-                    well_dict: dict) -> None:
-        pass
-
-        return
 
     def segment_nanowells(self, 
                           model_path: str = None, 
@@ -470,7 +351,7 @@ class NanoExperiment(SamSegmenter):
         self.plot_masks_params = kwargs.get('plot_masks_params', {})
         # Extract well_location_tolerance to specify the allowed difference in the centroid of the bounding box
         # between well locations in adjacent time points. Default is 5 pixels.
-        well_location_tolerance = kwargs.get('well_location_tolerance', 5)
+        well_location_tolerance = kwargs.get('well_location_tolerance', 15)
         if output_directory is None:
             roi_path = self._experiment_path + '/ROI'
         else: 
@@ -542,86 +423,5 @@ class NanoExperiment(SamSegmenter):
         self.whole_image_dict = whole_image_dict
         return whole_image_dict, well_dict
 
-
-
-#TODO -- START OVER...
-    def crop_nanowells(self,
-                       output_directory: str = None):
-        '''
-        Crops the images well-wise across time points for an experiment to create a new directory for
-        each well across time points. The cropped images will be saved in the output directory.
-        Note that this function will crop all channels, as defined in the NanoExperiment.
-
-            output_directory/
-                cropped_tif_images/
-                    field_id_0_channel_id_d0/
-                        field_id_0_channel_id_0_well_id_0/
-                            image_time_point_id_0_well_id_0.tif 
-                            image_time_point_id_1_well_id_0.tif
-                        ...
-        '''
-        segment_channel = str(self._channel_id) + str(self._segment_channel)
-        if output_directory is None:
-            cropped_tif_image_path = self._experiment_path + '/cropped_tif_images'
-        else:
-            cropped_tif_image_path = output_directory + '/cropped_tif_images'
-        if not os.path.exists(cropped_tif_image_path):
-            os.makedirs(cropped_tif_image_path)
-        # Channels are indexed from 0
-        for i in range(self._num_channels):
-            print('Channel: ', i)
-            for field_id_well_id, well_info in self.well_dict.items():
-                print("Field ID and Well ID: ", field_id_well_id)
-                # Create directory for each field and channel
-                field_channel_path = cropped_tif_image_path + '/' + field_id_well_id[:3] + self._channel_id + str(i)
-                # Get original TIF image path
-                if not os.path.exists(field_channel_path):
-                        os.makedirs(field_channel_path)
-                # Select the well-level information
-                for j, roi in enumerate(well_info[0]):
-                    print("Methods and Properties:")
-                    print(dir(roi))
-                    # Create image path
-                    # The channel will need to be changed, because the pngs were generated from the brightfield channel
-                    png_path = well_info[2][j]
-                    # Change the channel in the image path
-                    png_path = png_path.replace(segment_channel, str(self._channel_id) + str(i))
-                    print('PNG PATH: ', png_path)
-                    field_channel_well_path = field_channel_path + '/' + field_id_well_id[4:]
-                    if not os.path.exists(field_channel_well_path):
-                        os.makedirs(field_channel_well_path)
-                    og_tif_path = self._experiment_path + '/' + field_id_well_id[:3] + self._channel_id + str(i) + '/' + png_path.rstrip('.png') + '.TIF'
-                    print('Original TIF path: ', og_tif_path)
-                    # TODO: Figure out a different cropping mechanism, this IS NOT WORKING
-                    cropped_tif_path = field_channel_well_path + '/' + png_path.rstrip('.png') + '.TIF'
-                    # initialize imagej
-                    ij = imagej.init('sc.fiji:fiji')
-                    # load image
-                    image = ij.io().open(og_tif_path)
-                    if not isinstance(image, ImgPlus):
-                        image = ImgPlus(image)
-                    # get roi as rectangle
-                    x = int(roi.left)
-                    y = int(roi.top)
-                    width = int(roi.widthd)
-                    height = int(roi.heightd)
-                    # Calculate max coordinates
-                    x_max = x + width - 1
-                    y_max = y + height - 1
-                    # Create Java long arrays from Python lists
-                    start = JArray(JLong)([x, y])
-                    end = JArray(JLong)([x_max, y_max])
-                    # Create interval
-                    interval = FinalInterval(start, end)
-                    # crop image
-                    cropped_im = ij.op().run("net.imagej.ops.transform.crop.CropImgPlus", image, interval, False)
-                    # Save TIF
-                    ij.io().save(cropped_im, cropped_tif_path)
-                    # Save png
-                    cropped_png_path = field_channel_well_path + '/' + png_path
-                    ij.io.save(cropped_im, cropped_png_path)
-                    # Clean up
-                    ij.dispose()
-        return None
     
     
