@@ -219,10 +219,8 @@ class NanoExperiment(SamSegmenter):
                                         [num_rois_0, num_rois_1, ...]]}
             whole_image_dict (dict): The updated dictionary containing the field level information for each time point.
                 The dictionary is structured as follows:
-                {'field_id_0': {"total_rois": total_rois, 
-                                "png_path": png_path}
-                'field_id_1': {"total_rois": total_rois,
-                                "png_path": png_path}
+                {'field_id_0': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...],
+                'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...]}
         '''
         # Create new image-level dictionary to keep track of this image's wells
         whole_field_wells = {}
@@ -277,15 +275,14 @@ class NanoExperiment(SamSegmenter):
             if whole_image_dict is None:
                 whole_image_dict = {}
             if field_str not in whole_image_dict:
-                whole_image_dict[field_str] = [[total_rois], [png_path]]
+                whole_image_dict[field_str] = [[total_rois], [{png_path: whole_field_wells}]]
             else:
                 whole_image_dict[field_str] = [whole_image_dict[field_str][0] + [total_rois],
-                                                whole_image_dict[field_str][1] + [png_path]] 
-        whole_image_dict[field_str].append(whole_field_wells) 
+                                                whole_image_dict[field_str][1] + [{png_path: whole_field_wells}]] 
         return well_dict, whole_image_dict
 
     def generate_validation_plot(self, 
-                                 well_dict: dict,
+                                 whole_image_dict: dict,
                                  plot_save_path: str) -> None:
         '''
         Generate a plot with well labels on the segmented image.
