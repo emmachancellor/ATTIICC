@@ -227,7 +227,7 @@ class SamSegmenter:
                 plt.savefig(save_path)    
         return
 
-    def _filter_duplicate_masks(self, 
+    def _filter_duplicate_masks(self,
                centroid_list_sorted: list, 
                coordinate_dict: dict, 
                filter_distance: int,
@@ -237,6 +237,17 @@ class SamSegmenter:
         '''
         Filter duplicate ROIs based on the distance between the centroids.
         Helper function for generate_rois.
+        
+        Inputs:
+            centroid_list_sorted (list): A list of centroids sorted in a specific order.
+            coordinate_dict (dict): A dictionary mapping coordinates to segment numbers.
+            filter_distance (int): The maximum distance allowed between centroids for them to be considered duplicates.
+            roi_path (str, optional): The path to the ROI directory. Defaults to None.
+            save_heatmap (bool, optional): Whether to save a heatmap of the centroid distances. Defaults to False.
+            validation_path (str, optional): The path to the validation directory. Defaults to None.
+        Returns:
+            list: A list of filtered centroids without duplicates.
+
         '''
         print(f"Initial number of ROIs: {len(centroid_list_sorted)}")
         print(f"Filter distance: {filter_distance}")
@@ -450,6 +461,9 @@ class SamSegmenter:
                         print("Making directory at: ", validation_dir)
                         os.makedirs(validation_dir)
                     plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
+                elif not os.path.exists(validation_path):
+                    os.makedirs(validation_path)
+                    plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
                 else:
                     plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
                 if print_plot:

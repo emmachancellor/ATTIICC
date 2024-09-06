@@ -220,12 +220,12 @@ class NanoExperiment(SamSegmenter):
             whole_image_dict (dict): The updated dictionary containing the field level information for each time point.
                 The dictionary is structured as follows:
                 {'field_id_0': {"total_rois": total_rois, 
-                                "png_path": png_path, 
-                                "first_well_coords": [sum_boxes]}
+                                "png_path": png_path}
                 'field_id_1': {"total_rois": total_rois,
-                                "png_path": png_path,
-                                "first_well_coords": [sum_boxes]}
+                                "png_path": png_path}
         '''
+        # Create new image-level dictionary to keep track of this image's wells
+        whole_field_wells = {}
         if well_dict is None:
             well_dict = {}        
         well_number = 0
@@ -235,6 +235,7 @@ class NanoExperiment(SamSegmenter):
             png_name = png_path.split('/')[-1]
             if well_name not in well_dict:
                 well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [centroids[result_index]]]
+                whole_field_wells[well_name] = centroids[result_index]
             else:
                 x_1, y_1 = well_dict[well_name][3][-1]
                 last_timepoint_location_sum = x_1 + y_1
@@ -259,23 +260,43 @@ class NanoExperiment(SamSegmenter):
                                                 well_dict[well_name][2] + [png_name], 
                                                 well_dict[well_name][3] + [centroids[matching_centroid_index]]]
                         well_number += 1
+                        whole_field_wells[well_name] = centroids[matching_centroid_index]
                         continue
                     else:
                         print(f"No matching centroid found for {well_name}. No ROI will be added at this time point.")
                         well_number += 1
+                        whole_field_wells[well_name] = "No Matching Well"
                         continue
                 # If the centroid hasn't moved significantly, update the existing well
                 well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
                                         well_dict[well_name][1] + [box[result_index]],
                                         well_dict[well_name][2] + [png_name], 
                                         well_dict[well_name][3] + [centroids[result_index]]]
+                whole_field_wells[well_name] = centroids[result_index]
             well_number += 1
-        if whole_image_dict is None:
-            whole_image_dict = {}
-        if field_str not in whole_image_dict:
-            whole_image_dict[field_str] = {"total_rois": [total_rois],
-                                        "png_path": [png_path]}
+            if whole_image_dict is None:
+                whole_image_dict = {}
+            if field_str not in whole_image_dict:
+                whole_image_dict[field_str] = [[total_rois], [png_path]]
+            else:
+                whole_image_dict[field_str] = [whole_image_dict[field_str][0] + [total_rois],
+                                                whole_image_dict[field_str][1] + [png_path]] 
+        whole_image_dict[field_str].append(whole_field_wells) 
         return well_dict, whole_image_dict
+
+    def generate_validation_plot(self, 
+                                 well_dict: dict,
+                                 plot_save_path: str) -> None:
+        '''
+        Generate a plot with well labels on the segmented image.
+
+        Inputs:
+            well_dict: (dict) A dictionary containing the ROI coordinates and 
+                image information for each well across all time points.
+        '''
+
+        return
+        
 
     def segment_nanowells(self, 
                           model_path: str = None, 
