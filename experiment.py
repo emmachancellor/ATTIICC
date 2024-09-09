@@ -5,6 +5,8 @@ import read_roi
 import attiicc as ac
 import cv2
 import imagej
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
 from attiicc.segmentation import SamSegmenter
 from experiment_utils import convert_tif_to_png, find_files, generate_comparison_plot
 class NanoExperiment(SamSegmenter):
@@ -291,7 +293,24 @@ class NanoExperiment(SamSegmenter):
             well_dict: (dict) A dictionary containing the ROI coordinates and 
                 image information for each well across all time points.
         '''
+        for field in whole_image_dict.keys():
+            for time_point_dict in whole_image_dict[field][1]:
+                for png_path in time_point_dict.keys():
+                    img = mpimg.imread(png_path)
+                    print("Generating validation plot for ", self._png_path)
+                    well_coord_dict = time_point_dict[png_path]
+                    # Extract coordinates and labels from the dictionary
+                    coordinates = list(well_coord_dict.values())
+                    labels = list(well_coord_dict.keys())
 
+                    # Create a scatter plot of the centroids
+                    plt.scatter(*zip(*coordinates), color='yellow', marker='o')
+                    plt.title(f"Centroids for {self.png_path}")
+
+                    # Annotate each point with its well name
+                    for (x, y), label in zip(coordinates, labels):
+                        plt.text(x, y, label, color='white')
+                
         return
         
 
