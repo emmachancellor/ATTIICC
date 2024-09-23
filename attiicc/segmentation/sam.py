@@ -443,31 +443,31 @@ class SamSegmenter:
                     for root, _, files in os.walk(new_path):
                         for file in files:
                             zipf.write(os.path.join(root, file), file)
-            if validation_plot:
-                # Load image
-                img = mpimg.imread(self._png_path)
-                print("Generating validation plot for ", self._png_path)
-                plt.imshow(img, cmap='gray')
-                # Create a scatter plot of the centroids
-                plt.scatter(*zip(*filtered_coordinates), color='yellow', marker='o')
-                plt.title(f"Centroids for {image_name}")
-                # Annotate each point with its label
-                # TODO: Modify the label to be the assigned well name.
-                for (x, y), i in zip(filtered_coordinates, range(len(filtered_coordinates))):
-                    plt.text(x, y, str(i), color='white')
-                if validation_path is None:
-                    validation_dir = os.path.join(roi_path, "validation_plots")
-                    if not os.path.exists(validation_dir):
-                        print("Making directory at: ", validation_dir)
-                        os.makedirs(validation_dir)
-                    plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
-                elif not os.path.exists(validation_path):
-                    os.makedirs(validation_path)
-                    plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
-                else:
-                    plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
-                if print_plot:
-                    plt.show()
-                plt.close()
+            # if validation_plot:
+            #     # Load image
+            #     img = mpimg.imread(self._png_path)
+            #     print("Generating validation plot for ", self._png_path)
+            #     plt.imshow(img, cmap='gray')
+            #     # Create a scatter plot of the centroids
+            #     plt.scatter(*zip(*filtered_coordinates), color='yellow', marker='o')
+            #     plt.title(f"Centroids for {image_name}")
+            #     # Annotate each point with its label
+            #     # TODO: Modify the label to be the assigned well name.
+            #     for (x, y), i in zip(filtered_coordinates, range(len(filtered_coordinates))):
+            #         plt.text(x, y, str(i), color='white')
+            #     if validation_path is None:
+            #         validation_dir = os.path.join(roi_path, "validation_plots")
+            #         if not os.path.exists(validation_dir):
+            #             print("Making directory at: ", validation_dir)
+            #             os.makedirs(validation_dir)
+            #         plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
+            #     elif not os.path.exists(validation_path):
+            #         os.makedirs(validation_path)
+            #         plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
+            #     else:
+            #         plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
+            #     if print_plot:
+            #         plt.show()
+            #     plt.close()
         return roi_and_box_and_centroid_list
     

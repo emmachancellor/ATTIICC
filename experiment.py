@@ -274,30 +274,40 @@ class NanoExperiment(SamSegmenter):
                                         well_dict[well_name][3] + [centroids[result_index]]]
                 whole_field_wells[well_name] = centroids[result_index]
             well_number += 1
-            if whole_image_dict is None:
-                whole_image_dict = {}
-            if field_str not in whole_image_dict:
-                whole_image_dict[field_str] = [[total_rois], [{png_path: whole_field_wells}]]
-            else:
-                whole_image_dict[field_str] = [whole_image_dict[field_str][0] + [total_rois],
-                                                whole_image_dict[field_str][1] + [{png_path: whole_field_wells}]] 
+        if whole_image_dict is None:
+            whole_image_dict = {}
+        if field_str not in whole_image_dict.keys():
+            # Create initial field-level dictionary entry
+            print("Adding field to whole_image_dict: ", field_str)
+            whole_image_dict[field_str] = [[total_rois], [{png_path: whole_field_wells}]]
+        else:
+            print("Updating field with png-level information in whole_image_dict: ", png_path)
+            whole_image_dict[field_str] = [whole_image_dict[field_str][0] + [total_rois],
+                                            whole_image_dict[field_str][1] + [{png_path: whole_field_wells}]] 
         return well_dict, whole_image_dict
 
     def generate_validation_plot(self, 
                                  whole_image_dict: dict,
-                                 plot_save_path: str) -> None:
+                                 validation_path: str,
+                                 roi_path: str) -> None:
         '''
         Generate a plot with well labels on the segmented image.
 
         Inputs:
-            well_dict: (dict) A dictionary containing the ROI coordinates and 
+            whole_image_dict: (dict) A dictionary containing the ROI coordinates and 
                 image information for each well across all time points.
+                The dictionary is structured as follows:
+                {'field_id_0': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...],
+                'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...]}
         '''
         for field in whole_image_dict.keys():
             for time_point_dict in whole_image_dict[field][1]:
+                print("Generating validation plot for ", time_point_dict)
                 for png_path in time_point_dict.keys():
                     img = mpimg.imread(png_path)
-                    print("Generating validation plot for ", self._png_path)
+                    image_name = png_path.split('/')[-1].rstrip('.png')
+                    plt.imshow(img, cmap='gray')
+                    print("Generating validation plot for ", image_name)
                     well_coord_dict = time_point_dict[png_path]
                     # Extract coordinates and labels from the dictionary
                     coordinates = list(well_coord_dict.values())
@@ -305,12 +315,24 @@ class NanoExperiment(SamSegmenter):
 
                     # Create a scatter plot of the centroids
                     plt.scatter(*zip(*coordinates), color='yellow', marker='o')
-                    plt.title(f"Centroids for {self.png_path}")
+                    plt.title(f"Centroids for {image_name}")
 
                     # Annotate each point with its well name
                     for (x, y), label in zip(coordinates, labels):
-                        plt.text(x, y, label, color='white')
-                
+                        strip_label = label.split('_')[-1]
+                        plt.text(x, y, strip_label, color='white')
+                    if validation_path is None:
+                        validation_dir = os.path.join(roi_path, "validation_plots")
+                        if not os.path.exists(validation_dir):
+                            print("Making directory at: ", validation_dir)
+                            os.makedirs(validation_dir)
+                        plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
+                    elif not os.path.exists(validation_path):
+                        os.makedirs(validation_path)
+                        plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
+                    else:
+                        plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))        
+                    plt.close()
         return
         
 
@@ -372,14 +394,11 @@ class NanoExperiment(SamSegmenter):
                                         [box_0, box_1, ...],
                                         [time_point_0, time_point_1, ...],
                                         [num_rois_0, num_rois_1, ...]]}
-            whole_image_dict (dict): The updated dictionary containing the field level information for each time point.
+            whole_image_dict: (dict) A dictionary containing the ROI coordinates and 
+                image information for each well across all time points.
                 The dictionary is structured as follows:
-                {'field_id_0': {"total_rois": total_rois, 
-                                "png_path": png_path, 
-                                "first_well_coords": [sum_boxes]}
-                'field_id_1': {"total_rois": total_rois,
-                                "png_path": png_path,
-                                "first_well_coords": [sum_boxes]}
+                {'field_id_0': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...],
+                'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...]}
         '''
         assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified for segmentation. \
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
@@ -439,25 +458,11 @@ class NanoExperiment(SamSegmenter):
                                                                       well_dict,
                                                                       img_idx=i,
                                                                       well_location_tolerance=well_location_tolerance)
-        # Perform well-matching. If well locations are not consistent across time points,
-        # the user will be prompted to verify the discordance.
-        # TODO: Modify to be consistent with the new well_matching() logic
-        if self.generate_rois_params.get('well_match') is True:
-            print("Matching wells across time points")
-            rewrite, whole_image_dict = self.match_wells(whole_image_dict, well_dict)
-            if rewrite:
-                well_dict = self.generate_image_dicts(len(roi), 
-                                                    field_str, 
-                                                    png_path, 
-                                                    roi, 
-                                                    box, 
-                                                    centroids,
-                                                    whole_image_dict, 
-                                                    well_dict,
-                                                    img_idx=i,
-                                                    well_location_tolerance=well_location_tolerance)
-        self.well_dict = well_dict
-        self.whole_image_dict = whole_image_dict
+        # Generate validation plots, if specified
+        if self.generate_rois_params.get('validation_plot') is True:
+            self.generate_validation_plot(whole_image_dict, 
+                                          self.generate_rois_params.get('validation_path'),
+                                          roi_path)
         return whole_image_dict, well_dict
 
     
