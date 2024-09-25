@@ -2,13 +2,14 @@ import os
 import numpy as np
 import fnmatch
 import read_roi
+import re
 import attiicc as ac
 import cv2
 import imagej
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 from attiicc.segmentation import SamSegmenter
-from experiment_utils import convert_tif_to_png, find_files, generate_comparison_plot
+from experiment_utils import convert_tif_to_png, find_files, generate_comparison_plot, sort_paths
 class NanoExperiment(SamSegmenter):
     '''Apply segmentation functions to an experiment with multiple channels, 
     fields of view, and time points.
@@ -183,6 +184,7 @@ class NanoExperiment(SamSegmenter):
                             centroids: list,
                             whole_image_dict = None,
                             well_dict = None,
+                            first_frame = False,
                             img_idx = None,
                             well_location_tolerance = 15) -> dict:
         '''
@@ -229,51 +231,57 @@ class NanoExperiment(SamSegmenter):
         if well_dict is None:
             well_dict = {}        
         well_number = 0
+        print("Matching ROIS for: ", png_path)
         for result_index in range(len(roi)):
             total_rois = len(roi)
             well_name = f'{field_str}_well{well_number}'
             png_name = png_path.split('/')[-1]
-            if well_name not in well_dict:
+            if well_name not in well_dict or first_frame:
                 well_dict[well_name] = [[roi[result_index]], [box[result_index]], [png_name], [centroids[result_index]]]
                 whole_field_wells[well_name] = centroids[result_index]
+                well_number += 1
             else:
                 x_1, y_1 = well_dict[well_name][3][-1]
                 last_timepoint_location_sum = x_1 + y_1
                 x_2, y_2 = centroids[result_index]
                 current_timepoint_location_sum = x_2 + y_2
+                #TODO: Fix the logic of finding the matching centroid
                 if abs(current_timepoint_location_sum - last_timepoint_location_sum) > well_location_tolerance:
                     print(f'Well {well_name} has moved more than {well_location_tolerance} pixels from the previous time point.')
-                    print(f'Last time point location: {last_timepoint_location_sum}')
-                    print(f'Current time point location: {current_timepoint_location_sum}')
+                    print(f'Last time point location: {x_1, y_1}')
+                    print(f'Current time point location: {x_2, y_2}')
                     # Search for a matching centroid from all centroids within the timpoint
                     matching_centroid_index = None
                     for i, (x, y) in enumerate(centroids):
-                        if abs((x + y) - last_timepoint_location_sum) <= well_location_tolerance:
+                        #if abs((x + y) - last_timepoint_location_sum) <= well_location_tolerance:
+                        if abs(x - x_1) <= well_location_tolerance:
                             matching_centroid_index = i
-                            matching_location = x + y
                             break
                     
                     if matching_centroid_index is not None:
-                        print(f"Found matching centroid at index {matching_centroid_index}, (time point location: {matching_location})")
+                        print(f"Found matching centroid at index {matching_centroid_index}, (time point location: {(x,y)})")
                         well_dict[well_name] = [well_dict[well_name][0] + [roi[matching_centroid_index]], 
                                                 well_dict[well_name][1] + [box[matching_centroid_index]],
                                                 well_dict[well_name][2] + [png_name], 
                                                 well_dict[well_name][3] + [centroids[matching_centroid_index]]]
                         well_number += 1
+                        ### CHECK THIS LINE
                         whole_field_wells[well_name] = centroids[matching_centroid_index]
+                        print(f"Added ROI to {whole_field_wells[well_name]}")
                         continue
                     else:
                         print(f"No matching centroid found for {well_name}. No ROI will be added at this time point.")
                         well_number += 1
                         whole_field_wells[well_name] = "No Matching Well"
                         continue
-                # If the centroid hasn't moved significantly, update the existing well
-                well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
-                                        well_dict[well_name][1] + [box[result_index]],
-                                        well_dict[well_name][2] + [png_name], 
-                                        well_dict[well_name][3] + [centroids[result_index]]]
-                whole_field_wells[well_name] = centroids[result_index]
-            well_number += 1
+                
+                else: # If the centroid hasn't moved significantly, update the existing well
+                    well_dict[well_name] = [well_dict[well_name][0] + [roi[result_index]], 
+                                            well_dict[well_name][1] + [box[result_index]],
+                                            well_dict[well_name][2] + [png_name], 
+                                            well_dict[well_name][3] + [centroids[result_index]]]
+                    whole_field_wells[well_name] = centroids[result_index]
+                    well_number += 1
         if whole_image_dict is None:
             whole_image_dict = {}
         if field_str not in whole_image_dict.keys():
@@ -281,9 +289,11 @@ class NanoExperiment(SamSegmenter):
             print("Adding field to whole_image_dict: ", field_str)
             whole_image_dict[field_str] = [[total_rois], [{png_path: whole_field_wells}]]
         else:
+            # Update field-level dictionary entry with new image information
+            whole_image_dict[field_str][1][0][png_path] = whole_field_wells
             print("Updating field with png-level information in whole_image_dict: ", png_path)
             whole_image_dict[field_str] = [whole_image_dict[field_str][0] + [total_rois],
-                                            whole_image_dict[field_str][1] + [{png_path: whole_field_wells}]] 
+                                            whole_image_dict[field_str][1]] 
         return well_dict, whole_image_dict
 
     def generate_validation_plot(self, 
@@ -297,42 +307,48 @@ class NanoExperiment(SamSegmenter):
             whole_image_dict: (dict) A dictionary containing the ROI coordinates and 
                 image information for each well across all time points.
                 The dictionary is structured as follows:
-                {'field_id_0': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...],
-                'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...]}
+                {'field_id_0': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, 
+                {png_path:(centroid_x, centroid_y)}...],
+                'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, 
+                {png_path:(centroid_x, centroid_y)}...]}
         '''
         for field in whole_image_dict.keys():
-            for time_point_dict in whole_image_dict[field][1]:
-                print("Generating validation plot for ", time_point_dict)
-                for png_path in time_point_dict.keys():
-                    img = mpimg.imread(png_path)
-                    image_name = png_path.split('/')[-1].rstrip('.png')
-                    plt.imshow(img, cmap='gray')
-                    print("Generating validation plot for ", image_name)
-                    well_coord_dict = time_point_dict[png_path]
-                    # Extract coordinates and labels from the dictionary
-                    coordinates = list(well_coord_dict.values())
-                    labels = list(well_coord_dict.keys())
+            time_point_dict = whole_image_dict[field][1][0]
+            image_file_paths = list(time_point_dict.keys())
+            image_file_paths = sort_paths(image_file_paths)
+            for png_path in image_file_paths:
+                img = mpimg.imread(png_path)
+                image_name = png_path.split('/')[-1].rstrip('.png')
+                plt.imshow(img, cmap='gray')
+                print("Generating validation plot for ", image_name)
+                time_point_dict = whole_image_dict[field][1]
+                well_coord_dict = time_point_dict[0][png_path]
+                print("Well coordinates: ", well_coord_dict)
+                # Extract coordinates and labels from the dictionary
+                coordinates = list(well_coord_dict.values())
+                labels = list(well_coord_dict.keys())
 
-                    # Create a scatter plot of the centroids
-                    plt.scatter(*zip(*coordinates), color='yellow', marker='o')
-                    plt.title(f"Centroids for {image_name}")
+                # Create a scatter plot of the centroids
+                print("Coordinates: ", coordinates)
+                plt.scatter(*zip(*coordinates), color='yellow', marker='o')
+                plt.title(f"Centroids for {image_name}")
 
-                    # Annotate each point with its well name
-                    for (x, y), label in zip(coordinates, labels):
-                        strip_label = label.split('_')[-1]
-                        plt.text(x, y, strip_label, color='white')
-                    if validation_path is None:
-                        validation_dir = os.path.join(roi_path, "validation_plots")
-                        if not os.path.exists(validation_dir):
-                            print("Making directory at: ", validation_dir)
-                            os.makedirs(validation_dir)
-                        plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
-                    elif not os.path.exists(validation_path):
-                        os.makedirs(validation_path)
-                        plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
-                    else:
-                        plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))        
-                    plt.close()
+                # Annotate each point with its well name
+                for (x, y), label in zip(coordinates, labels):
+                    strip_label = label.split('_')[-1]
+                    plt.text(x, y, strip_label, color='white')
+                if validation_path is None:
+                    validation_dir = os.path.join(roi_path, "validation_plots")
+                    if not os.path.exists(validation_dir):
+                        print("Making directory at: ", validation_dir)
+                        os.makedirs(validation_dir)
+                    plt.savefig(os.path.join(validation_dir, f"{image_name}_validation.png"))
+                elif not os.path.exists(validation_path):
+                    os.makedirs(validation_path)
+                    plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))
+                else:
+                    plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))        
+                plt.close()
         return
         
 
@@ -436,7 +452,10 @@ class NanoExperiment(SamSegmenter):
             begin_segmenting = True
             # Segment images at the single image level and iteratively update the
             # whole_image_dict and well_dict for each time point
-            for i, j in enumerate(os.listdir(png_image_directory_path)):
+            # PNG PATHS MUST BE SORTED CHRONOLOGICALLY!!!
+            sorted_png_image_list = sort_paths(os.listdir(png_image_directory_path))
+            for i, j in enumerate(sorted_png_image_list):
+                first_frame = (i == 0)
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
                 if begin_segmenting is True: # Initialize SamSegmenter instance
@@ -456,6 +475,7 @@ class NanoExperiment(SamSegmenter):
                                                                       centroids, 
                                                                       whole_image_dict,
                                                                       well_dict,
+                                                                      first_frame=first_frame,
                                                                       img_idx=i,
                                                                       well_location_tolerance=well_location_tolerance)
         # Generate validation plots, if specified

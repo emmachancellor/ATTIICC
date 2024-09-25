@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import attiicc as ac
+import re
 from PIL import Image
 
 def convert_tif_to_png(tif_path: str, 
@@ -121,3 +122,34 @@ def generate_comparison_plot(image_1: str,
         os.makedirs(save_path)
         plt.savefig(save_path + f'/comparison_{field_of_view}_{time_point_1}.png')
     return
+
+def sort_paths(paths):
+    """
+    Sorts a list of file paths based on the numeric value found after the character 'p' in the filenames.
+    Args:
+        paths (list of str): A list of file paths to be sorted.
+    Returns:
+        list of str: The sorted list of file paths.
+    Example:
+        paths = [
+            "/path/to/file_p10.txt",
+            "/path/to/file_p2.txt",
+            "/path/to/file_p1.txt"
+        ]
+        sorted_paths = sort_paths(paths)
+        # sorted_paths will be:
+        # [
+        #     "/path/to/file_p1.txt",
+        #     "/path/to/file_p2.txt",
+        #     "/path/to/file_p10.txt"
+        # ]
+    """
+    def extract_number(path):
+        # Extract the filename from the path
+        filename = path.split('/')[-1]
+        # Find the number after 'p' in the filename
+        match = re.search(r'p(\d+)', filename)
+        # Return the number as an integer, or 0 if not found
+        return int(match.group(1)) if match else 0
+    # Sort the paths using the extract_number function as key
+    return sorted(paths, key=extract_number)
