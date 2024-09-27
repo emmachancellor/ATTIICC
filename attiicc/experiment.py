@@ -8,7 +8,7 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 
 from .segmentation import SamSegmenter
-from .utils import convert_tif_to_png, find_files, generate_comparison_plot, sort_paths
+from .utils import convert_tif_to_png, generate_comparison_plot, sort_paths
 
 class NanoExperiment(SamSegmenter):
     '''Apply segmentation functions to an experiment with multiple channels, 
