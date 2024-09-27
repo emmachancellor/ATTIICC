@@ -1,10 +1,12 @@
 import torch
 import cv2
 import os
+import numpy as np
 import segment_anything
 from typing import Dict, Tuple, List
 
 from .segmentation import Segmentation
+from . import utils
 
 
 # -----------------------------------------------------------------------------
@@ -69,6 +71,7 @@ class SamSegmenter:
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
         DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         MODEL_TYPE = model_type
+
         # Load the model
         sam = segment_anything.sam_model_registry[MODEL_TYPE](checkpoint=self.weights).to(device=DEVICE)
         print("Model Loaded")
@@ -76,26 +79,30 @@ class SamSegmenter:
 
     # --- Public ---------------------------------------------------------------
 
-    def segment(self, png_path: str) -> Segmentation:
+    def segment(self, image_path: str) -> Segmentation:
         """Segment an image using a pretrained SAM model.
 
         Args:
             sam (Sam): The loaded SAM model.
-            png_path (str): The path to the image to segment.
+            image_path (str): The path to the image to segment.
 
         Returns:
             sam_result (Segmentation): The segmentation object.
 
         """
         # Load the image.
-        image_bgr = cv2.imread(png_path) # cv2 reads in BGR format
-        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
+        if utils.is_tif(image_path):
+            image_rgb = utils.load_tif(image_path).convert('RGB')
+            image_rgb = np.asarray(image_rgb)
+        else:
+            image_bgr = cv2.imread(image_path) # cv2 reads in BGR format
+            image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
 
         # Segment the image.
         mask_generator = segment_anything.SamAutomaticMaskGenerator(self.sam)
         sam_result = mask_generator.generate(image_rgb)
 
         # Build the Segmentation object.
-        sam_segmentation = Segmentation(sam_result, image_bgr, png_path=png_path)
+        sam_segmentation = Segmentation(sam_result, image_rgb, image_path=image_path)
 
         return sam_segmentation

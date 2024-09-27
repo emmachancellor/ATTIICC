@@ -8,26 +8,13 @@ import matplotlib.image as mpimg
 import numpy as np
 import re
 
-from typing import List
+from typing import List, Union
 from tqdm import tqdm
 from PIL import Image
 from os.path import join, exists, isdir, isfile, basename, dirname
 
 # --------------------------------------------------------------------------- #
 # Internal utility functions
-
-def _is_tif(file: str) -> bool:
-    """Check if a file is a .tif or .tiff file.
-
-    Args:
-        file: (str) The name of the file.
-
-    Returns:
-        (bool) True if the file is a .tif or .tiff file, False otherwise.
-
-    """
-    return file.lower().endswith('.tif') or file.lower().endswith('.tiff')
-
 
 def _get_path_without_ext(file: str) -> str:
     """Get the filename without the extension."""
@@ -41,6 +28,19 @@ def _get_filename_without_ext(file: str) -> str:
 
 # --------------------------------------------------------------------------- #
 # User-facing functions
+
+def is_tif(file: str) -> bool:
+    """Check if a file is a .tif or .tiff file.
+
+    Args:
+        file: (str) The name of the file.
+
+    Returns:
+        (bool) True if the file is a .tif or .tiff file, False otherwise.
+
+    """
+    return file.lower().endswith('.tif') or file.lower().endswith('.tiff')
+
 
 def load_tif(file: str) -> Image:
     """Load a .tif or .tiff file.
@@ -94,7 +94,7 @@ def convert_tif_to_png(tif_path: str, png_path: str = None) -> str:
 
     # Only use valid .tif files
     files = [f for f in files
-             if _is_tif(f) and not basename(f).startswith('.')]
+             if is_tif(f) and not basename(f).startswith('.')]
 
     # Convert .tif images to .png images
     for i, filename in tqdm(enumerate(files), desc='Converting images...'):

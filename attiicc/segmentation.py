@@ -5,9 +5,73 @@ import supervision as sv
 import matplotlib.pyplot as plt
 import numpy as np
 import cupy as cp
+from os.path import join, exists
 
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 from roifile import ImagejRoi
+from .utils import _get_filename_without_ext
+
+# -----------------------------------------------------------------------------
+
+class Region:
+
+    def __init__(
+        self,
+        roi: ImagejRoi,
+        box: Tuple[int,int,int,int],
+        centroid: Tuple[int,int]
+    ) -> None:
+        """Build a SAM Region object.
+
+        Args:
+            roi (ImagejRoi): The ROI object.
+            box (tuple): The boundary box of the ROI in XYWH format.
+            centroid (tuple): The centroid of the ROI.
+
+        """
+        self.roi = roi
+        self.box = box
+        self.centroid = centroid
+
+class RegionCollection:
+
+    def __init__(
+        self,
+        *regions: Region,
+        img: Optional[np.ndarray] = None
+    ) -> None:
+        """Build a SAM RegionCollection object.
+
+        Args:
+            *regions (Region): A collection of Region objects.
+
+        """
+        self.regions = regions
+        self.img = img
+
+    def plot(
+        self,
+        img: Optional[np.ndarray] = None,
+        show_labels: bool = True
+    ):
+        """Plot the regions on the image."""
+        if img is None:
+            img = self.img
+
+        # Plot the region centroids.
+        plt.scatter(*zip(*[r.centroid for r in self.regions]), color='yellow', marker='o')
+
+        # Plot the reference image.
+        if img is not None:
+            plt.imshow(img)
+
+        # Show labels
+        if show_labels:
+            for i, region in enumerate(self.regions):
+                x, y = region.centroid
+                plt.text(x, y, str(i), color='white')
+
+        plt.show()
 
 # -----------------------------------------------------------------------------
 
@@ -15,9 +79,9 @@ class Segmentation:
     def __init__(
         self,
         masks: List[Dict],
-        img_bgr: np.ndarray,
+        img: np.ndarray,
         *,
-        png_path: str = None,
+        image_path: str = None,
         tif_path: str = None
     ) -> None:
         """Build a SAM Segmentation result object.
@@ -33,9 +97,8 @@ class Segmentation:
 
         """
         self.masks = masks
-        self.img_bgr = img_bgr
-        self.png_path = png_path
-        self.tif_path = tif_path
+        self.img = img
+        self.image_path = image_path
 
     @property
     def segmentation(self) -> List[np.ndarray]:
@@ -64,6 +127,13 @@ class Segmentation:
     @property
     def crop_box(self) -> List[Tuple[int,int,int,int]]:
         return [mask["crop_box"] for mask in self.masks]
+
+    @property
+    def name(self):
+        if self.image_path:
+            return _get_filename_without_ext(self.image_path)
+        else:
+            return 'Unknown'
 
     def __repr__(self):
         return str(self)
@@ -100,13 +170,13 @@ class Segmentation:
         # Annotate the image
         mask_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX)
         detections = sv.Detections.from_sam(sam_result=self.masks)
-        annotated_image = mask_annotator.annotate(scene=self.img_bgr.copy(), detections=detections)
+        annotated_image = mask_annotator.annotate(scene=self.img.copy(), detections=detections)
 
         # Create a figure and a 1x2 grid of axes
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
         # Plot the images onto the axes
-        axs[0].imshow(self.img_bgr)
+        axs[0].imshow(self.img)
         axs[0].set_title(titles[0])
         axs[0].axis('off')
 
@@ -193,6 +263,7 @@ class Segmentation:
             list: A list of filtered centroids without duplicates.
 
         """
+        print("Filtering for duplicates...")
         print(f"Initial number of ROIs: {len(centroid_list_sorted)}")
         print(f"Filter distance: {filter_distance}")
 
@@ -279,14 +350,13 @@ class Segmentation:
                 plt.axvline(x=idx, color='r', linestyle='--', alpha=0.5)
 
             if validation_path is None:
-                image_name = os.path.basename(self._png_path).rstrip(".png")
                 validation_dir = os.path.join(roi_path, "validation_plots")
                 if not os.path.exists(validation_dir):
                     print("Making directory at: ", validation_dir)
                     os.makedirs(validation_dir)
-                save_path = os.path.join(validation_dir, f"{image_name}_heatmap.png")
+                save_path = os.path.join(validation_dir, f"{self.name}_heatmap.png")
             else:
-                save_path = os.path.join(validation_path, f"{image_name}_heatmap.png")
+                save_path = os.path.join(validation_path, f"{self.name}_heatmap.png")
 
             plt.savefig(save_path)
             print(f"Heatmap saved to: {save_path}")
@@ -294,19 +364,23 @@ class Segmentation:
 
         return centroid_list_filtered
 
+    @staticmethod
+    def _get_contours(img: np.ndarray) -> List[np.ndarray]:
+        """Get the contours of a binary image."""
+        binary_image = np.uint8(img) * 255
+        contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        return contours
+
     def generate_rois(
         self,
-        target_area: List[List[int]] = [11100,12000],
+        min_area: int = 11100,
         filter_distance: int = 10,
         roi_path: str = None,
         roi_archive: bool = True,
-        validation_plot:bool = False,
-        print_plot:bool = False,
-        validation_path:bool = None,
+        validation_path: bool = None,
         save_heatmap: bool = False,
         filter_duplicates: bool = False,
-        **kwargs
-    ) -> list:
+    ) -> RegionCollection:
         """
         Generate ROIs from the segmentation results.
 
@@ -324,76 +398,74 @@ class Segmentation:
             save_heatmap (bool, optional): Whether to save a correlation heatmap of the centroid coordinates.
 
         Returns:
-            roi_and_box_and_centroid_list: a list of lists containing the ROIs and the bounding boxes, sorted
-                in order by the y-coordinate of the centroid, and the (X,Y) coordinates of the centroid.
-                The first list contains ROIs and the second list contains lists of the box coordinates in XYWH format.
-                The third list is a list of tuples containing the centroid coordinates.
+            RegionCollection containing segmentation Region objects, sorted in order by the y-coordinate of the centroid, and the (X,Y) coordinates of the centroid.
 
         """
-        image_name = os.path.basename(self._png_path).rstrip(".png")
-        seg_num = 1
         centroid_list = []
-        roi_list = []
-        box_list = []
-        centroid_coords_filtered = []
-        coordinate_dict = {}
+        regions = {}
+
         for seg, box in zip(self.segmentation, self.bbox):
-            binary_image = np.uint8(seg) * 255
-            contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = self._get_contours(seg)
             for contour in contours:
-                area = cv2.contourArea(contour)
-                M = cv2.moments(contour)
-                if area > target_area[0]: # only select contours that are the nanowells (some small contours from cells may be present)
+                # Only select contours that are the nanowells (some small contours from cells may be present)
+                if cv2.contourArea(contour) > min_area:
+                    # Calculate the centroid of the contour
+                    M = cv2.moments(contour)
                     points = contour.squeeze().tolist()
+
+                    # Create an ImagejRoi object from the contour points
                     roi = ImagejRoi.frompoints(points)
-                    if M["m00"] != 0: # calculate the centroid to allow filtering of duplicate nanowells
+
+                    # Calculate the centroid to allow filtering of duplicate nanowells
+                    if M["m00"] != 0:
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
-                        coords_id = [cX, cY]
-                        coordinate_dict[(cX, cY)] = [roi, seg_num, box, (cX, cY)]
+                        coords_id = (cX, cY)
+                        regions[coords_id] = Region(roi, box, coords_id)
                         centroid_list.append(coords_id)
-            seg_num += 1
 
-        # Sort the list of lists by the value at index 0
-        centroid_list_sorted = sorted(centroid_list, key=lambda x: x[0])
-        if filter_duplicates is True:
-            # Remove duplicates
-            print("Total number of ROIs before filtering: ", len(centroid_list_sorted))
-            print("Filtering for duplicates...")
-            filtered_coordinates = self._filter_duplicate_masks(centroid_list_sorted,
-                                                coordinate_dict,
-                                                filter_distance=filter_distance,
-                                                roi_path=roi_path,
-                                                save_heatmap=save_heatmap,
-                                                validation_path=validation_path)
-            # Sort the list by y-coordinate
-        else:
-            filtered_coordinates = centroid_list_sorted
+        # Sort the list of lists by the value at index 0 (x)
+        centroid_list = sorted(centroid_list, key=lambda x: x[0])
 
-        filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
-        for i in filtered_coordinates:
-            roi_list.append(coordinate_dict[tuple(i)][0])
-            box_list.append(coordinate_dict[tuple(i)][2])
-            centroid_coords_filtered.append(coordinate_dict[tuple(i)][3])
+        # Remove duplicates
+        if filter_duplicates:
+            centroid_list = self._filter_duplicate_masks(
+                centroid_list,
+                regions,
+                filter_distance=filter_distance,
+                roi_path=roi_path,
+                save_heatmap=save_heatmap,
+                validation_path=validation_path
+            )
 
-        roi_and_box_and_centroid_list = [roi_list, box_list, centroid_coords_filtered]
+        # Sort the list of lists by the value at index 1 (y)
+        centroid_list = sorted(centroid_list, key=lambda x: x[1])
+
+        # Create a list of ROIs, box coordinates, and centroid coordinates
+        regions_to_return = [regions[coord] for coord in centroid_list]
+
+        # Export ROIs as ImageJ and archive in ZIP format.
         if roi_path is not None:
-            print("Saving ROIs to: ", roi_path+'/'+image_name)
-            new_path = os.path.join(roi_path, image_name)
-            if not os.path.exists(new_path):
-                print("Making directory at: ", new_path)
-                os.makedirs(new_path)
-            for i, j in enumerate(filtered_coordinates):
-                roi = coordinate_dict[tuple(j)][0]
-                roi_name = f"{image_name}_ROI_{i+1}.roi"
-                roi.tofile(os.path.join(new_path, roi_name))
-            print(f"ROIs saved for {image_name}")
+            # Create an export directory based on the image name
+            dest = join(roi_path, self.name)
+            if not exists(dest):
+                os.makedirs(dest)
+
+            # Export the ImageJ ROI files
+            for i, j in enumerate(centroid_list):
+                roi = regions[tuple(j)].roi
+                roi_name = f"{self.name}_ROI_{i+1}.roi"
+                roi.tofile(join(dest, roi_name))
+
+            print(f"ROIs saved at {dest}")
+
+            # Archive the ROIs into a zip file
             if roi_archive:
-                print("Archiving ROIs to: ", f'{roi_path}/{image_name}_roi.zip')
-                with zipfile.ZipFile(f'{roi_path}/{image_name}_rois.zip', 'w') as zipf:
-                    for root, _, files in os.walk(new_path):
+                print("Archiving ROIs to: ", f'{roi_path}/{self.name}_roi.zip')
+                with zipfile.ZipFile(f'{roi_path}/{self.name}_rois.zip', 'w') as zipf:
+                    for root, _, files in os.walk(dest):
                         for file in files:
                             zipf.write(os.path.join(root, file), file)
 
-        return roi_and_box_and_centroid_list
+        return RegionCollection(*regions_to_return, img=self.img)
 
