@@ -1,15 +1,15 @@
 import os
 import numpy as np
 import fnmatch
-import read_roi
 import re
-import attiicc as ac
 import cv2
 import imagej
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
-from attiicc.segmentation import SamSegmenter
-from experiment_utils import convert_tif_to_png, find_files, generate_comparison_plot, sort_paths
+
+from .segmentation import SamSegmenter
+from .utils import convert_tif_to_png, find_files, generate_comparison_plot, sort_paths
+
 class NanoExperiment(SamSegmenter):
     '''Apply segmentation functions to an experiment with multiple channels, 
     fields of view, and time points.
@@ -459,7 +459,7 @@ class NanoExperiment(SamSegmenter):
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
                 if begin_segmenting is True: # Initialize SamSegmenter instance
-                    segmentation = ac.SamSegmenter(model_path=model_path, 
+                    segmentation = SamSegmenter(model_path=model_path,
                                                     model_type=model_type, 
                                                     png_path=png_path,
                                                     tif_path=tif_path)

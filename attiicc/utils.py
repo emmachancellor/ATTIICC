@@ -1,4 +1,4 @@
-'''Utility functions for attiicc.Experiment.'''
+"""Utility functions for attiicc."""
 
 
 import os
@@ -6,24 +6,27 @@ import fnmatch
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
-import attiicc as ac
 import re
 from PIL import Image
 
-def convert_tif_to_png(tif_path: str, 
-                       png_path: str = None, 
-                       single_image: bool = False) -> None:
-    '''
-    Convert a .tif image to a .png image.
+def convert_tif_to_png(
+    tif_path: str,
+    png_path: str = None,
+    single_image: bool = False
+) -> None:
+    """Convert a .tif image to a .png image.
+
     Inputs:
         tif_path: (str) The path to a directory of .tif images.
         png_path: (str) The path to a directory of .png images. Default is None.
             If None, a new directory will be created at the same level as the
             tif_path directory, with '_png' appended to the name.
         single_image: (bool) If True, then tif_path is a path to a single .tif
+
     Outputs:
         png_path: (str) The path to a directory of .png images.
-    '''
+
+    """
     if single_image is False:
         files = os.listdir(tif_path)
         total = len(files)
@@ -32,6 +35,7 @@ def convert_tif_to_png(tif_path: str,
         if not os.path.exists(png_path):
             os.makedirs(png_path)
     else:
+        total = 0
         files = [tif_path]
         if png_path is None:
             png_path = tif_path.rstrip(".TIF") + '_png'

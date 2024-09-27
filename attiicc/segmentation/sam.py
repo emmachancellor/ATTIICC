@@ -7,9 +7,11 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import cupy as cp
+import segment_anything
+
 from typing import Dict, Tuple, List
 from roifile import ImagejRoi
-from attiicc import segment_anything as sa
+
 
 class SamSegmenter:
     '''Segment nanowell images using a pretrained SAM model.
@@ -107,7 +109,7 @@ class SamSegmenter:
         self.crop_box = [mask["crop_box"] for mask in self._sam_result]
 
     def _load_sam_model(self, 
-                        model_type: str) -> sa.Sam:
+                        model_type: str) -> "segment_anything.Sam":
         '''
         Loads a pretrained SAM model.
         Input:
@@ -126,7 +128,7 @@ class SamSegmenter:
         DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         MODEL_TYPE = model_type
         # Load the model
-        sam = sa.sam_model_registry[MODEL_TYPE](checkpoint=self.model_path).to(device=DEVICE)
+        sam = segment_anything.sam_model_registry[MODEL_TYPE](checkpoint=self.model_path).to(device=DEVICE)
         print("Model Loaded")
         return sam
 
@@ -149,7 +151,7 @@ class SamSegmenter:
                 `stability_score` : an additional measure of mask quality
                 `crop_box` : the crop of the image used to generate this mask in XYWH format
         '''
-        mask_generator = sa.SamAutomaticMaskGenerator(sam)
+        mask_generator = segment_anything.SamAutomaticMaskGenerator(sam)
         image_bgr = cv2.imread(png_path) # cv2 reads in BGR format
         print("PNG Path: ", png_path)
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
