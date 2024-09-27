@@ -230,8 +230,8 @@ class SamSegmenter:
 
     def plot_masks(
         self,
-        save: bool = False,
         save_path: str = None,
+        *,
         grid_size: Tuple[int,int] = (30, 5),
         size: Tuple[int,int] = (48,96),
         **kwargs
@@ -239,7 +239,6 @@ class SamSegmenter:
         """Plot masks from the segmentation results.
 
         Args:
-            save (bool, optional): Whether to save the image. Default is False.
             save_path (str, optional): The path to save the image. Default is None.
             grid_size (tuple, optional): The grid size for the plot. Default is (9,10).
             size (tuple, optional): The size of the plot. Default is (48,96).
@@ -251,8 +250,6 @@ class SamSegmenter:
             mask['segmentation']
             for mask in sorted(self._sam_result, key=lambda x: x['area'], reverse=True)
         ]
-        num_images = len(masks)
-        grid_size = grid_size
 
         # Create a figure and a grid of axes
         fig, axs = plt.subplots(*grid_size, figsize=size)
@@ -260,18 +257,25 @@ class SamSegmenter:
         # Reshape axs to 1-D array to easily iterate over
         axs = axs.ravel()
 
+        if len(masks) > len(axs):
+            raise ValueError(
+                f"Number of masks ({len(masks)}) exceeds number of subplots ({len(axs)}). "
+                "Please set grid_size to a larger value."
+            )
+
         # Plot the images onto the axes
-        for i in range(num_images):
+        for i in range(len(masks)):
             axs[i].imshow(masks[i])
             axs[i].axis('off')
 
         # Remove unused subplots
-        if num_images < np.prod(grid_size):
-            for j in range(num_images, np.prod(grid_size)):
+        if len(masks) < np.prod(grid_size):
+            for j in range(len(masks), np.prod(grid_size)):
                 fig.delaxes(axs[j])
-            if save:
-                plt.savefig(save_path)    
-        return
+            if save_path:
+                plt.savefig(save_path)
+
+        plt.show()
 
     def _filter_duplicate_masks(
         self,
