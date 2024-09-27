@@ -7,7 +7,7 @@ import imagej
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 
-from .segmentation import SamSegmenter
+from .sam import SamSegmenter
 from .utils import convert_tif_to_png, generate_comparison_plot, sort_paths
 
 

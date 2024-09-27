@@ -1,116 +1,77 @@
-import torch
 import cv2
 import os
 import zipfile
 import supervision as sv
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import numpy as np
 import cupy as cp
-import segment_anything
 
 from typing import Dict, Tuple, List
 from roifile import ImagejRoi
 
+# -----------------------------------------------------------------------------
 
-class SamSegmenter:
-    """Segment nanowell images using a pretrained SAM model.
-    
-    This interface is designed to be used with nanowell images. 
-    """
-
-    def __init__( 
+class Segmentation:
+    def __init__(
         self,
-        weights: str = None,
-        model_type: str = "vit_h",
+        masks: List[Dict],
+        img_bgr: np.ndarray,
+        *,
         png_path: str = None,
-        tif_path: str = None,
-        **kwargs
+        tif_path: str = None
     ) -> None:
-        """
-        Initialize a SAM model and calculate the segmentation for an image.
+        """Build a SAM Segmentation result object.
 
-        Args:
-            weights (str): The path to the model checkpoint. This must be downloaded \
-                from Meta on a user's local machine. Checkpoints can be downloaded from \
-                https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
-            model_type (str, optional): Specify the sam model type to load.\
-                Default is "vit_h". Can use "vit_b", "vit_l", or "vit_h".
-            png_path (str, optional): The path to the image to segment. \
-                Default is None.
-            tif_path (str, optional): The path to the tif image to crop with \
-                the ROIs. Default is None.
+        Masks is expected to be a list of dictionaries containing:
+            `segmentation` : the mask
+            `area` : the area of the mask in pixels
+            `bbox` : the boundary box of the mask in XYWH format
+            `predicted_iou` : the model's own prediction for the quality of the mask
+            `point_coords` : the sampled input point that generated this mask
+            `stability_score` : an additional measure of mask quality
+            `crop_box` : the crop of the image used to generate this mask in XYWH format
 
         """
-        self._validate_weights(weights)
+        self.masks = masks
+        self.img_bgr = img_bgr
+        self.png_path = png_path
+        self.tif_path = tif_path
 
-        self.weights = weights
-        self.model_type = model_type
-        self._png_path = png_path
-        self._tif_path = tif_path
-        self._sam_result = None
-        self.img_bgr = None
-        self.sam = None
-        self.segmentation = None
-        self.area = None
-        self.bbox = None
-        self.predicted_iou = None
-        self.point_coords = None
-        self.stability_score = None
-        self.crop_box = None
+    @property
+    def segmentation(self) -> List[np.ndarray]:
+        return [mask["segmentation"] for mask in self.masks]
 
-        if png_path is not None:
-            self.sam = self._load_sam_model(model_type=model_type)
-            self._sam_result, self.img_bgr = self._segment_image(self.sam, self._png_path)
+    @property
+    def area(self) -> List[int]:
+        return [mask["area"] for mask in self.masks]
 
-        if self._sam_result is not None:
-            self.segmentation = [mask["segmentation"] for mask in self._sam_result]
-            self.area = [mask["area"] for mask in self._sam_result]
-            self.bbox = [mask["bbox"] for mask in self._sam_result]
-            self.predicted_iou = [mask["predicted_iou"] for mask in self._sam_result]
-            self.point_coords = [mask["point_coords"] for mask in self._sam_result]
-            self.stability_score = [mask["stability_score"] for mask in self._sam_result]
-            self.crop_box = [mask["crop_box"] for mask in self._sam_result]
-    
-    def _validate_weights(self, weights: str) -> None:
-        """Validate the model weights path."""
+    @property
+    def bbox(self) -> List[Tuple[int,int,int,int]]:
+        return [mask["bbox"] for mask in self.masks]
 
-        if not isinstance(weights, str):
-            raise ValueError(
-                "Model checkpoint path on local machine must be specified for segmentation. "
-                "Model checkpoints may be downloaded from "
-                "https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
-            )
+    @property
+    def predicted_iou(self) -> List[float]:
+        return [mask["predicted_iou"] for mask in self.masks]
 
-    def update_image(
-        self,
-        png_path: str,
-        tif_path: str
-    ) -> None:
-        """
-        Update the image path and recalculate the segmentation results
-        without re-loading the SAM model. 
+    @property
+    def point_coords(self) -> List[Tuple[int,int]]:
+        return [mask["point_coords"] for mask in self.masks]
 
-        Args:
-            png_path (str): The path to the image to segment.
-            tif_path (str): The path to the tif image to crop with the ROIs.
+    @property
+    def stability_score(self) -> List[float]:
+        return [mask["stability_score"] for mask in self.masks]
 
-        """
-        self._png_path = png_path
-        self._tif_path = tif_path
-        self._sam_result, self.img_bgr = self._segment_image(self.sam, self._png_path)
-        self.segmentation = [mask["segmentation"] for mask in self._sam_result]
-        self.area = [mask["area"] for mask in self._sam_result]
-        self.bbox = [mask["bbox"] for mask in self._sam_result]
-        self.predicted_iou = [mask["predicted_iou"] for mask in self._sam_result]
-        self.point_coords = [mask["point_coords"] for mask in self._sam_result]
-        self.stability_score = [mask["stability_score"] for mask in self._sam_result]
-        self.crop_box = [mask["crop_box"] for mask in self._sam_result]
-    
-    def sam_area_filter(
-        self,
-        target_area: List[str]=[11100,12000]
-    ) -> None:
+    @property
+    def crop_box(self) -> List[Tuple[int,int,int,int]]:
+        return [mask["crop_box"] for mask in self.masks]
+
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return f"<Segmentation object with {len(self.masks)} masks>"
+
+    def area_filter(self, target_area: Tuple[int,int] = (11100, 12000)) -> None:
         """Filter the SAM results by area.
 
         Args:
@@ -119,84 +80,14 @@ class SamSegmenter:
                 the first value is the lower bound and the second value is the upper bound.
 
         """
-        self._sam_result = [mask for mask in self._sam_result if target_area[0] < mask['area'] < target_area[1]]
-        self.segmentation = [mask["segmentation"] for mask in self._sam_result]
-        self.area = [mask["area"] for mask in self._sam_result]
-        self.bbox = [mask["bbox"] for mask in self._sam_result]
-        self.predicted_iou = [mask["predicted_iou"] for mask in self._sam_result]
-        self.point_coords = [mask["point_coords"] for mask in self._sam_result]
-        self.stability_score = [mask["stability_score"] for mask in self._sam_result]
-        self.crop_box = [mask["crop_box"] for mask in self._sam_result]
+        self.masks = [mask for mask in self.masks if target_area[0] < mask['area'] < target_area[1]]
 
-    def _load_sam_model(
-        self,
-        model_type: str
-    ) -> "segment_anything.Sam":
-        """Loads a pretrained SAM model.
-
-        Args:
-            model_type (str): Specify the sam model type to load.
-                Can use "vit_b", "vit_l", or "vit_h".
-
-        Returns:
-            sam: The loaded SAM model.
-
-        """
-        if torch.cuda.is_available():
-            print("CUDA is available.")
-            print(f"Number of CUDA devices: {torch.cuda.device_count()}")
-        else:
-            print("CUDA is not available.")
-        
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-        DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        MODEL_TYPE = model_type
-        # Load the model
-        sam = segment_anything.sam_model_registry[MODEL_TYPE](checkpoint=self.weights).to(device=DEVICE)
-        print("Model Loaded")
-        return sam
-
-
-    @staticmethod
-    def _segment_image(
-        sam: "segment_anything.Sam",
-        png_path: str
-    ) -> Tuple[Dict, np.ndarray]:
-        """Segment an image using a pretrained SAM model.
-
-        Args:
-            sam (Sam): The loaded SAM model.
-            png_path (str): The path to the image to segment.
-
-        Returns:
-            sam_result (dict): The segmentation results. Contains: 
-                `segmentation` : the mask 
-                `area` : the area of the mask in pixels
-                `bbox` : the boundary box of the mask in XYWH format
-                `predicted_iou` : the model's own prediction for the quality of the mask
-                `point_coords` : the sampled input point that generated this mask
-                `stability_score` : an additional measure of mask quality
-                `crop_box` : the crop of the image used to generate this mask in XYWH format
-
-            image_bgr (np.ndarray): The original image in BGR format.
-
-        """
-        # Load the image.
-        image_bgr = cv2.imread(png_path) # cv2 reads in BGR format
-        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
-
-        # Segment the image
-        mask_generator = segment_anything.SamAutomaticMaskGenerator(sam)
-        sam_result = mask_generator.generate(image_rgb)
-
-        return sam_result, image_bgr
-    
-    def plot_segmented_image(
+    def plot(
         self,
         titles: List[str] = ['Source Image', 'Segmented Image'],
+        *,
         save: bool = False,
-        save_path: str = None,
-        **kwargs
+        save_path: str = None
     ) -> None:
         """Plot the original image and the segmented image side-by-side.
 
@@ -206,8 +97,9 @@ class SamSegmenter:
             save_path (str, optional): The path to save the image. Default is None.
 
         """
+        # Annotate the image
         mask_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX)
-        detections = sv.Detections.from_sam(sam_result=self._sam_result)
+        detections = sv.Detections.from_sam(sam_result=self.masks)
         annotated_image = mask_annotator.annotate(scene=self.img_bgr.copy(), detections=detections)
 
         # Create a figure and a 1x2 grid of axes
@@ -233,8 +125,7 @@ class SamSegmenter:
         save_path: str = None,
         *,
         grid_size: Tuple[int,int] = (30, 5),
-        size: Tuple[int,int] = (48,96),
-        **kwargs
+        size: Tuple[int,int] = (48,96)
     ) -> None:
         """Plot masks from the segmentation results.
 
@@ -248,7 +139,7 @@ class SamSegmenter:
         """
         masks = [
             mask['segmentation']
-            for mask in sorted(self._sam_result, key=lambda x: x['area'], reverse=True)
+            for mask in sorted(self.masks, key=lambda x: x['area'], reverse=True)
         ]
 
         # Create a figure and a grid of axes
@@ -289,7 +180,7 @@ class SamSegmenter:
         """Filter duplicate ROIs based on the distance between the centroids.
 
         Helper function for generate_rois.
-        
+
         Args:
             centroid_list_sorted (list): A list of centroids sorted in a specific order.
             coordinate_dict (dict): A dictionary mapping coordinates to segment numbers.
@@ -424,7 +315,7 @@ class SamSegmenter:
             filter_distance (int, optional): When filtering for duplicate ROIs
                 this method will search for ROI centroids that are within +/-
                 a number of pixels (similarity_filter). Default is 10 pixels.
-            roi_path (str, optional): The path to a directory where ROIs can be saved. Default is None.    
+            roi_path (str, optional): The path to a directory where ROIs can be saved. Default is None.
             roi_archive (bool, optional): Whether to save the ROIs as a .zip. Default is True.
                 This will save the roi.zip file in the roi_path. Default is True.
             validation_plot (bool, optional): Whether to save the validation plot. Default is False.
@@ -434,7 +325,7 @@ class SamSegmenter:
 
         Returns:
             roi_and_box_and_centroid_list: a list of lists containing the ROIs and the bounding boxes, sorted
-                in order by the y-coordinate of the centroid, and the (X,Y) coordinates of the centroid. 
+                in order by the y-coordinate of the centroid, and the (X,Y) coordinates of the centroid.
                 The first list contains ROIs and the second list contains lists of the box coordinates in XYWH format.
                 The third list is a list of tuples containing the centroid coordinates.
 
@@ -476,7 +367,7 @@ class SamSegmenter:
                                                 save_heatmap=save_heatmap,
                                                 validation_path=validation_path)
             # Sort the list by y-coordinate
-        else: 
+        else:
             filtered_coordinates = centroid_list_sorted
 
         filtered_coordinates = sorted(filtered_coordinates, key=lambda x: x[1])
@@ -484,7 +375,7 @@ class SamSegmenter:
             roi_list.append(coordinate_dict[tuple(i)][0])
             box_list.append(coordinate_dict[tuple(i)][2])
             centroid_coords_filtered.append(coordinate_dict[tuple(i)][3])
-            
+
         roi_and_box_and_centroid_list = [roi_list, box_list, centroid_coords_filtered]
         if roi_path is not None:
             print("Saving ROIs to: ", roi_path+'/'+image_name)
@@ -505,4 +396,4 @@ class SamSegmenter:
                             zipf.write(os.path.join(root, file), file)
 
         return roi_and_box_and_centroid_list
-    
+
