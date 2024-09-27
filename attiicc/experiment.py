@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from .segmentation import SamSegmenter
 from .utils import convert_tif_to_png, generate_comparison_plot, sort_paths
 
+
 class NanoExperiment(SamSegmenter):
     '''Apply segmentation functions to an experiment with multiple channels, 
     fields of view, and time points.
@@ -23,20 +24,20 @@ class NanoExperiment(SamSegmenter):
     '''
 
     def __init__(
-            self,
-            experiment_path: str = None,
-            field_id: str = None,
-            num_fields: int = None,
-            channel_id: str = None,
-            num_channels: int = None,
-            time_point_id: str = None,
-            num_time_points: int = None,
-            segment_channel: int = None,
-            field_leading_zero: bool = False,
-            time_point_leading_zero: bool = False,
-            well_dict: dict = None,
-            whole_image_dict: dict = None,
-            **kwargs # For SamSegmenter
+        self,
+        experiment_path: str = None,
+        field_id: str = None,
+        num_fields: int = None,
+        channel_id: str = None,
+        num_channels: int = None,
+        time_point_id: str = None,
+        num_time_points: int = None,
+        segment_channel: int = None,
+        field_leading_zero: bool = False,
+        time_point_leading_zero: bool = False,
+        well_dict: dict = None,
+        whole_image_dict: dict = None,
+        **kwargs # For SamSegmenter
     ) -> None:
         '''Initialize a NanoExperiment object.
         The experimental data should be organized as a directory tree with the following structure:
@@ -54,7 +55,7 @@ class NanoExperiment(SamSegmenter):
         to the field of view and channel identifiers. Each subdirectory should contain
         the raw .TIF images, with the time point identifier in the file name.
         
-        Inputs:
+        Args:
             experiment_path: (str) The path to the experiment parent directory.
             field_id: (str) The field of view identifier used in direcotry names.
             num_fields: (int) The number of fields of view in the experiment.
@@ -132,20 +133,22 @@ class NanoExperiment(SamSegmenter):
     def time_point_leading_zero(self, time_point_leading_zero) -> None:
         self._time_point_leading_zero = time_point_leading_zero
     
-    def set_structure(self, 
-                      field_id: str,
-                      num_fields: int,
-                      channel_id: str,
-                      num_channels: int,
-                      time_point_id: str,
-                      num_time_points: int,
-                      segment_channel: int,
-                      field_leading_zero: bool,
-                      time_point_leading_zero: bool) -> None:
-        '''
+    def set_structure(
+        self,
+        field_id: str,
+        num_fields: int,
+        channel_id: str,
+        num_channels: int,
+        time_point_id: str,
+        num_time_points: int,
+        segment_channel: int,
+        field_leading_zero: bool,
+        time_point_leading_zero: bool
+    ) -> None:
+        """
         Set the structure of the experiment.
 
-        Inputs:
+        Args:
             field_id: (str) The field of view identifier used in direcotry names.
             num_fields: (int) The number of fields of view in the experiment.
             channel_id: (str) The channel identifier used in directory names.
@@ -161,9 +164,11 @@ class NanoExperiment(SamSegmenter):
                 plot_masks_params: (dict) Keyword arguments for SamSegmenter.plot_masks().
                 For all parameters, format should be: {'parameter_name': parameter_value}
                 Example: generate_rois_params = {'save_rois': True, 'save_directory': 'experiment_path/ROI'}
-        Outputs:
+
+        Returns:
             None
-        '''
+
+        """
         self._field_id = field_id
         self._num_fields = num_fields
         self._channel_id = channel_id
@@ -175,24 +180,26 @@ class NanoExperiment(SamSegmenter):
         self._time_point_leading_zero = time_point_leading_zero
         return print(self.structure)
 
-    def generate_image_dicts(self,
-                            total_rois: int, 
-                            field_str: str,
-                            png_path: str,
-                            roi: list,
-                            box: list,
-                            centroids: list,
-                            whole_image_dict = None,
-                            well_dict = None,
-                            first_frame = False,
-                            img_idx = None,
-                            well_location_tolerance = 15) -> dict:
-        '''
-        Updates a dictionary containing well information across each time point \
+    def generate_image_dicts(
+        self,
+        total_rois: int,
+        field_str: str,
+        png_path: str,
+        roi: list,
+        box: list,
+        centroids: list,
+        whole_image_dict = None,
+        well_dict = None,
+        first_frame = False,
+        img_idx = None,
+        well_location_tolerance = 15
+    ) -> dict:
+        """
+        Update a dictionary containing well information across each time point \
         for each field and update the whole_image_dict with the sum of the bounding boxes
         of the first well in each time point.
 
-        Inputs:
+        Args:
             total_rois: (int) The total number of ROIs segmented in the image.
             field_str: (str) The field of view identifier. Derived from self._field_id.
             png_path: (str) The path to the image in the time series.
@@ -209,7 +216,7 @@ class NanoExperiment(SamSegmenter):
                 of a given well and the bounding box of the same well in the previous time point.
                 Default is 5 pixels.
         
-        Outputs:
+        Returns:
             well_dict (dict): A dictionary containing the ROIs, bounding box coordinates,
                 and time point identifier for each well across all time points. 
                 The dictionary is structured as follows:
@@ -225,7 +232,8 @@ class NanoExperiment(SamSegmenter):
                 The dictionary is structured as follows:
                 {'field_id_0': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...],
                 'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...]}
-        '''
+
+        """
         # Create new image-level dictionary to keep track of this image's wells
         whole_field_wells = {}
         if well_dict is None:
@@ -296,14 +304,15 @@ class NanoExperiment(SamSegmenter):
                                             whole_image_dict[field_str][1]] 
         return well_dict, whole_image_dict
 
-    def generate_validation_plot(self, 
-                                 whole_image_dict: dict,
-                                 validation_path: str,
-                                 roi_path: str) -> None:
-        '''
-        Generate a plot with well labels on the segmented image.
+    def generate_validation_plot(
+        self,
+        whole_image_dict: dict,
+        validation_path: str,
+        roi_path: str
+    ) -> None:
+        """Generate a plot with well labels on the segmented image.
 
-        Inputs:
+        Args:
             whole_image_dict: (dict) A dictionary containing the ROI coordinates and 
                 image information for each well across all time points.
                 The dictionary is structured as follows:
@@ -311,7 +320,8 @@ class NanoExperiment(SamSegmenter):
                 {png_path:(centroid_x, centroid_y)}...],
                 'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, 
                 {png_path:(centroid_x, centroid_y)}...]}
-        '''
+
+        """
         for field in whole_image_dict.keys():
             time_point_dict = whole_image_dict[field][1][0]
             image_file_paths = list(time_point_dict.keys())
@@ -349,17 +359,18 @@ class NanoExperiment(SamSegmenter):
                 else:
                     plt.savefig(os.path.join(validation_path, f"{image_name}_validation.png"))        
                 plt.close()
-        return
         
 
-    def segment_nanowells(self, 
-                          model_path: str = None, 
-                          model_type: str = 'vit_h', 
-                          output_directory: str = None, 
-                          convert_png: bool = False,
-                          **kwargs) -> dict:
-        '''
-        Segment and crop the images in the experiment.
+    def segment_nanowells(
+        self,
+        model_path: str = None,
+        model_type: str = 'vit_h',
+        output_directory: str = None,
+        convert_png: bool = False,
+        **kwargs
+    ) -> dict:
+        """Segment and crop the images in the experiment.
+
         Takes in images that are ordered by the experiment structure, then
         segments and crops the images well-wise. The cropped images and their
         ROIs will be saved in individual directories for each well. The structure
@@ -384,7 +395,7 @@ class NanoExperiment(SamSegmenter):
         Note: if the field_id has a leading zero, the 'field_leading_zero' parameter in the SamSegmenter 
             instance must be set to True.
 
-        Inputs:
+        Args:
             model_path: (str) The path to the model checkpoint. This must be downloaded \
                 from Meta on a user's local machine. Checkpoints can be downloaded from \
                 https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints
@@ -398,7 +409,7 @@ class NanoExperiment(SamSegmenter):
                 the directory extension 'png.' For example, '/experiment_path/field_id_0_channel_id_0_png/'. \
                 Default is False.
             
-        Outputs:
+        Returns:
             well_dict (dict): A dictionary containing the ROIs, bounding box coordinates,
                 and time point identifier for each well across all time points. 
                 The dictionary is structured as follows:
@@ -415,7 +426,8 @@ class NanoExperiment(SamSegmenter):
                 The dictionary is structured as follows:
                 {'field_id_0': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...],
                 'field_id_1': [[total_rois], {png_path: {'well_id_0': (centroid_x, centroid_y)}, ...]}
-        '''
+
+        """
         assert isinstance(model_path, str), "Model checkpoint path on local machine must be specified for segmentation. \
             Model checkpoints must be downloaded from https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints."
         self.generate_rois_params = kwargs.get('generate_rois_params', {})
@@ -459,7 +471,7 @@ class NanoExperiment(SamSegmenter):
                 png_path=png_image_directory_path + '/' + j
                 tif_path=tif_image_directory_path + '/' + j.rstrip('.png') + '.TIF'
                 if begin_segmenting is True: # Initialize SamSegmenter instance
-                    segmentation = SamSegmenter(model_path=model_path,
+                    segmentation = SamSegmenter(weights=model_path,
                                                     model_type=model_type, 
                                                     png_path=png_path,
                                                     tif_path=tif_path)
