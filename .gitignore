@@ -2,3 +2,4 @@
 **/*.png
 **/*.TIF
 **/*.pth
+build/*

@@ -5,23 +5,132 @@ import supervision as sv
 import matplotlib.pyplot as plt
 import numpy as np
 import cupy as cp
+import math
 from os.path import join, exists
 
 from typing import Dict, Tuple, List, Optional
-from roifile import ImagejRoi
 from .utils import _get_filename_without_ext
+from .contours import (
+    calculate_average_contour, detect_grid, find_closest_to_centroid, rotate_coordinates
+)
 
 # -----------------------------------------------------------------------------
+
+class GridDefinition:
+    """Class to store the definition of a grid schematic."""
+
+    def __init__(self, x_spacing, y_spacing, angle, row_offset, shape_contours=None):
+        self.x_spacing = x_spacing
+        self.y_spacing = y_spacing
+        self.angle = angle
+        self.row_offset = row_offset
+        self.shape_contours = shape_contours
+
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return f"<GridDefinition(\n  x_spacing={self.x_spacing},\n  y_spacing={self.y_spacing},\n  angle={self.angle},\n  row_offset={self.row_offset},\n  has_shape={self.shape_contours is not None}\n)>"
+
+    def to_dict(self):
+        return {
+            "x_spacing": self.x_spacing,
+            "y_spacing": self.y_spacing,
+            "angle": self.angle,
+            "row_offset": self.row_offset
+        }
+
+    @classmethod
+    def from_dict(cls, grid_dict):
+        return cls(
+            x_spacing=grid_dict["x_spacing"],
+            y_spacing=grid_dict["y_spacing"],
+            angle=grid_dict["angle"],
+            row_offset=grid_dict["row_offset"]
+        )
+
+    @property
+    def has_shape(self):
+        return self.shape_contours is not None
+
+    def set_shape(self, shape_contours, rotate=False):
+        if rotate:
+            self.shape_contours = rotate_coordinates(shape_contours, self.angle)
+        else:
+            self.shape_contours = shape_contours
+
+    def build(self, anchor, x_max, y_max, img=None):
+        """Build a grid of regions from the grid definition."""
+        # Unpack the anchor
+        anchor_x, anchor_y = anchor
+
+        # Keep track of region centroids
+        centroids = []
+
+        # Starting at the anchor (center), build out the grid centroids
+        # in both the positive and negative directions.
+
+        # First, let's build the negative rows
+        n_rows_neg = int(math.ceil(float(anchor_y) / self.y_spacing))
+        for i in range(n_rows_neg):
+            y = anchor_y - i * self.y_spacing
+            row_offset = self.row_offset * i
+            row_anchor_x = anchor_x - row_offset
+
+            # Positive x direction
+            n_pos_cols = int(math.ceil(float(x_max - row_anchor_x) / self.x_spacing)) + 1
+            for j in range(n_pos_cols):
+                x = row_anchor_x + (j * self.x_spacing)
+                centroids.append((x, y))
+
+            # Negative x direction
+            n_neg_cols = int(math.ceil(float(row_anchor_x) / self.x_spacing)) + 1
+            for j in range(n_neg_cols):
+                x = row_anchor_x - (j * self.x_spacing)
+                centroids.append((x, y))
+
+        # Now, let's build the positive rows
+        n_rows_pos = int(math.ceil(float(y_max - anchor_y) / self.y_spacing))
+        for i in range(n_rows_pos):
+            y = anchor_y + i * self.y_spacing
+            row_offset = self.row_offset * i
+            row_anchor_x = anchor_x + row_offset
+
+            # Positive x direction
+            n_pos_cols = int(math.ceil(float(x_max - row_anchor_x) / self.x_spacing)) + 1
+            for j in range(n_pos_cols):
+                x = row_anchor_x + (j * self.x_spacing)
+                centroids.append((x, y))
+
+            # Negative x direction
+            n_neg_cols = int(math.ceil(float(row_anchor_x) / self.x_spacing)) + 1
+            for j in range(n_neg_cols):
+                x = row_anchor_x - (j * self.x_spacing)
+                centroids.append((x, y))
+
+        # Rotate the centroids around the anchor
+        centroids = np.array(centroids)
+        if self.angle != 0:
+            centroids = rotate_coordinates(centroids, angle=-1 * self.angle, anchor=anchor)
+
+        # Finally, filter out any centroids that are outside the image bounds
+        centroids = [tuple(c) for c in centroids if 0 <= c[0] < x_max and 0 <= c[1] < y_max]
+
+        # Build the RegionGrid
+        rotated_shape = rotate_coordinates(self.shape_contours, angle=-1 * self.angle)
+        regions = [Region(rotated_shape, centroid) for centroid in centroids]
+        return RegionGrid(*regions, img=img, grid_definition=self)
+
 
 class Region:
 
     def __init__(
         self,
-        roi: ImagejRoi,
-        box: Tuple[int,int,int,int],
-        centroid: Tuple[int,int]
+        roi: np.ndarray,
+        centroid: Tuple[int,int],
+        box: Optional[Tuple[int,int,int,int]] = None,
     ) -> None:
-        """Build a SAM Region object.
+        """Build a SAM Region object, representing a single well plate.
 
         Args:
             roi (ImagejRoi): The ROI object.
@@ -30,8 +139,33 @@ class Region:
 
         """
         self.roi = roi
-        self.box = box
         self.centroid = centroid
+        if box is None:
+            box = cv2.boundingRect(roi)
+        self.box = box
+
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return f"<Region object with centroid {self.centroid}>"
+
+    def plot(self):
+        """Plot the region."""
+        # Plot the ROI
+        plt.plot(*zip(*self.roi), color='black')
+
+        # Plot the centroid
+        plt.scatter(*self.centroid, color='red', marker='o')
+
+        # Ensure the plot is square
+        plt.gca().set_aspect('equal', adjustable='box')
+
+        # Ensure the origin is in the top left
+        plt.gca().invert_yaxis()
+
+        plt.show()
+
 
 class RegionCollection:
 
@@ -40,7 +174,7 @@ class RegionCollection:
         *regions: Region,
         img: Optional[np.ndarray] = None
     ) -> None:
-        """Build a SAM RegionCollection object.
+        """Build a loose, unordered collection of Regions.
 
         Args:
             *regions (Region): A collection of Region objects.
@@ -49,21 +183,97 @@ class RegionCollection:
         self.regions = regions
         self.img = img
 
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return f"<RegionCollection object with {len(self.regions)} regions>"
+
+    def __len__(self):
+        return len(self.regions)
+
+    def __getitem__(self, idx):
+        return self.regions[idx]
+
+    def __iter__(self):
+        return iter(self.regions)
+
+    def __next__(self):
+        return next(self.regions)
+
+    def __contains__(self, item):
+        return item in self.regions
+
+    def __add__(self, other):
+        return RegionCollection(*(self.regions + other.regions), img=self.img)
+
+    def __sub__(self, other):
+        return RegionCollection(*(r for r in self.regions if r not in other.regions), img=self.img)
+
+    def __eq__(self, other):
+        return self.regions == other.regions
+
+    def __ne__(self, other):
+        return self.regions != other.regions
+
+    @property
+    def centroids(self) -> List[Tuple[int,int]]:
+        return np.array([r.centroid for r in self.regions])
+
+    def remove_edge_regions(self, threshold: float = 0.9) -> None:
+        """Remove regions at the edge of the image based on
+        the percentage of the region that is inside the image bounds.
+
+        Args:
+            threshold (float, optional): The threshold for the percentage of
+                the region inside the image bounds. Default is 0.9.
+
+        """
+        # For each region, find what percentage of the region is inside the image bounds
+        img_h, img_w = self.img.shape[:2]
+        orig_regions = self.regions
+        regions = []
+        for region in self.regions:
+            # Get the bounding box
+            x, y, w, h = region.box
+
+            # Adjust for the image centroid
+            x += region.centroid[0]
+            y += region.centroid[1]
+
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            x1, y1, x2, y2 = max(0, x1), max(0, y1), min(img_w, x2), min(img_h, y2)
+            area = (x2 - x1) * (y2 - y1)
+            region_area = w * h
+            if area / region_area > threshold:
+                regions.append(region)
+        self.regions = regions
+        print("Removed", len(orig_regions) - len(regions), "edge regions.")
+
     def plot(
         self,
         img: Optional[np.ndarray] = None,
-        show_labels: bool = True
+        *,
+        show_labels: bool = True,
+        show_image: bool = True,
+        show_contours: bool = True
     ):
         """Plot the regions on the image."""
         if img is None:
             img = self.img
 
         # Plot the region centroids.
-        plt.scatter(*zip(*[r.centroid for r in self.regions]), color='yellow', marker='o')
+        if len(self.regions) > 0:
+            plt.scatter(*zip(*[r.centroid for r in self.regions]), color='yellow', marker='o')
 
         # Plot the reference image.
-        if img is not None:
+        if show_image and img is not None:
             plt.imshow(img)
+
+        # Plot the region contours.
+        if show_contours:
+            for region in self.regions:
+                plt.plot(*zip(*(region.roi + region.centroid)), color='red')
 
         # Show labels
         if show_labels:
@@ -73,6 +283,65 @@ class RegionCollection:
 
         plt.show()
 
+    def get_average_contour(self, **kwargs) -> np.ndarray:
+        """Get the average contour of the regions."""
+        contours = [r.roi for r in self.regions]
+        return calculate_average_contour(contours, **kwargs)
+
+    def plot_average_contour(self, **kwargs):
+        """Plot the average contour of the regions."""
+        average_contour = self.get_average_contour(**kwargs)
+        plt.plot(*zip(*average_contour), color='black')
+        plt.gca().set_aspect('equal', adjustable='box')
+        plt.gca().invert_yaxis()
+        plt.show()
+
+    def detect_grid(self) -> GridDefinition:
+        # Detect the well spacing and orientation
+        grid_def = detect_grid(self.centroids)
+
+        # Find the average contour
+        contours = self.get_average_contour()
+
+        # Apply the contours to the grid definition
+        grid_def.set_shape(contours, rotate=True)
+
+        return grid_def
+
+    def apply_grid(self, grid: GridDefinition) -> "RegionGrid":
+        """Convert this collection into a grid of regions."""
+        # First, find the anchor point,
+        # which will be the point nearest to the center.
+        anchor = find_closest_to_centroid(self.centroids)
+
+        # Then, build the grid.
+        return grid.build(anchor, x_max=self.img.shape[1], y_max=self.img.shape[0], img=self.img)
+
+    def build_grid(self) -> "RegionGrid":
+        """Build a grid of regions."""
+        grid_def = self.detect_grid()
+        return self.apply_grid(grid_def)
+
+
+class RegionGrid(RegionCollection):
+
+    def __init__(
+        self,
+        *regions: Region,
+        img: Optional[np.ndarray] = None,
+        grid_definition: Optional[GridDefinition] = None
+    ) -> None:
+        """Build a grid of regions.
+
+        Args:
+            *regions (Region): A collection of Region objects.
+            img (np.ndarray, optional): The image to plot the grid on.
+            grid (GridDefinition, optional): The grid definition.
+
+        """
+        super().__init__(*regions, img=img)
+        self.grid_definition = grid_definition
+
 # -----------------------------------------------------------------------------
 
 class Segmentation:
@@ -81,8 +350,7 @@ class Segmentation:
         masks: List[Dict],
         img: np.ndarray,
         *,
-        image_path: str = None,
-        tif_path: str = None
+        image_path: str = None
     ) -> None:
         """Build a SAM Segmentation result object.
 
@@ -371,7 +639,7 @@ class Segmentation:
         contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         return contours
 
-    def generate_rois(
+    def find_regions(
         self,
         min_area: int = 11100,
         filter_distance: int = 10,
@@ -411,18 +679,15 @@ class Segmentation:
                 if cv2.contourArea(contour) > min_area:
                     # Calculate the centroid of the contour
                     M = cv2.moments(contour)
-                    points = contour.squeeze().tolist()
-
-                    # Create an ImagejRoi object from the contour points
-                    roi = ImagejRoi.frompoints(points)
+                    points = contour.squeeze()
 
                     # Calculate the centroid to allow filtering of duplicate nanowells
                     if M["m00"] != 0:
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
-                        coords_id = (cX, cY)
-                        regions[coords_id] = Region(roi, box, coords_id)
-                        centroid_list.append(coords_id)
+                        centroid = (cX, cY)
+                        regions[centroid] = Region(points - np.array(centroid), centroid, box)
+                        centroid_list.append(centroid)
 
         # Sort the list of lists by the value at index 0 (x)
         centroid_list = sorted(centroid_list, key=lambda x: x[0])
@@ -446,6 +711,11 @@ class Segmentation:
 
         # Export ROIs as ImageJ and archive in ZIP format.
         if roi_path is not None:
+            try:
+                from roifile import ImagejRoi
+            except ImportError:
+                raise ImportError("The roifile package is required to export ROIs. Please install it using 'pip install roifile'.")
+
             # Create an export directory based on the image name
             dest = join(roi_path, self.name)
             if not exists(dest):
@@ -453,7 +723,10 @@ class Segmentation:
 
             # Export the ImageJ ROI files
             for i, j in enumerate(centroid_list):
-                roi = regions[tuple(j)].roi
+                # Create an ImagejRoi object from the contour points
+                coords = regions[tuple(j)].roi
+                roi = ImagejRoi.frompoints(coords)
+
                 roi_name = f"{self.name}_ROI_{i+1}.roi"
                 roi.tofile(join(dest, roi_name))
 
