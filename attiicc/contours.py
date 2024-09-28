@@ -1,15 +1,23 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
-from scipy.stats import mode
-from scipy.ndimage import rotate
+from typing import List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .segmentation import GridDefinition
 
 # -----------------------------------------------------------------------------
 # Discover contours
 
-def align_contours(contours):
-    # Align contours based on their centroids
+def align_contours(contours: List[np.ndarray]) -> List[np.ndarray]:
+    """Align contours to the origin by translating them.
+
+    Args:
+        contours: A list of contours, where each contour is an array of points.
+
+    Returns:
+        A list of aligned contours.
+
+    """
     aligned_contours = []
     for contour in contours:
         M = cv2.moments(contour)
@@ -18,22 +26,31 @@ def align_contours(contours):
             cY = int(M["m01"] / M["m00"])
         else:
             cX, cY = 0, 0
-        
+
         # Translate contour to origin
         aligned_contour = contour - [cX, cY]
         aligned_contours.append(aligned_contour)
-    
+
     return aligned_contours
 
 
-def resample_contour(contour, n_points=100):
-    # Ensure contour is a numpy array
+def resample_contour(contour: np.ndarray, n_points: int = 100) -> np.ndarray:
+    """Resample a contour to have a fixed number of points.
+
+    Args:
+        contour (np.ndarray): A contour as an array of points.
+        n_points (int): The number of points to resample the contour to.
+
+    Returns:
+        np.ndarray: The resampled contour.
+
+    """
     contour = np.array(contour).reshape(-1, 2)
-    
+
     # Calculate the cumulative length along the contour
     distances = np.sqrt(np.sum(np.diff(contour, axis=0)**2, axis=1))
     cumulative_distances = np.insert(np.cumsum(distances), 0, 0)
-    
+
     # Create new points along the contour at regular intervals
     total_length = cumulative_distances[-1]
     regular_intervals = np.linspace(0, total_length, n_points)
@@ -53,107 +70,58 @@ def resample_contour(contour, n_points=100):
     return np.array(resampled_contour, dtype=np.float32)
 
 
-def calculate_average_contour(contours, n_points=100, method='median'):
+def calculate_average_contour(
+    contours: List[np.ndarray],
+    n_points: int = 100,
+    method: str = 'median'
+) -> np.ndarray:
+    """Calculate the average contour from a list of contours.
+
+    Args:
+        contours (List[np.ndarray]): A list of contours, where each contour is an array of points.
+        n_points (int): The number of points to resample each contour to.
+        method (str): The method to use for calculating the average contour. Can be 'mean' or 'median'.
+
+    Returns:
+        np.ndarray: The average contour
+
+    """
     # Align contours
     aligned_contours = align_contours(contours)
-    
+
     # Resample contours
     resampled_contours = [resample_contour(contour, n_points) for contour in aligned_contours]
-    
+
     # Calculate average points
     reduce_fn = np.mean if method == 'mean' else np.median
     average_contour = reduce_fn(resampled_contours, axis=0)
-    
+
     # Convert back to integer coordinates
     average_contour = np.round(average_contour).astype(int)
-    
+
     return average_contour
-
-# -----------------------------------------------------------------------------
-# Discover underlying grid
-
-def find_grid(centroids, grid_size=512):
-
-    x, y = centroids[:, 0], centroids[:, 1]
-
-    # Define the range of the grid
-    xmin, xmax = np.min(x), np.max(x)
-    ymin, ymax = np.min(y), np.max(y)
-
-    # Create a 2D histogram
-    hist, xedges, yedges = np.histogram2d(x, y, bins=grid_size, range=[[xmin, xmax], [ymin, ymax]])
-
-    # The histogram serves as the image
-    image = hist
-
-    # Compute the 2D FFT and shift the zero frequency component to the center
-    fft_image = np.fft.fftshift(np.fft.fft2(image))
-
-    # Compute the magnitude spectrum (power spectrum)
-    magnitude_spectrum = np.abs(fft_image)
-
-    # Threshold the magnitude spectrum to find peaks
-    threshold = np.percentile(magnitude_spectrum, 99)  # Adjust as needed
-    peaks_indices = np.where(magnitude_spectrum > threshold)
-
-    # Get the coordinates of the peaks
-    ky, kx = peaks_indices
-
-    # Convert peak indices to frequencies
-    kx = kx - grid_size // 2
-    ky = ky - grid_size // 2
-
-    # Calculate the spatial frequencies
-    kx_freq = kx / (xmax - xmin)
-    ky_freq = ky / (ymax - ymin)
-
-    # Calculate the distances and angles of the peaks
-    distances = np.sqrt(kx_freq**2 + ky_freq**2)
-    angles = np.arctan2(ky_freq, kx_freq)
-
-    # Convert angles to degrees and normalize to [0, 180]
-    angles_deg = np.degrees(angles) % 180
-
-    # Identify dominant distances and angles
-    dominant_distance = mode(distances.round(decimals=2))[0][0]
-    dominant_angles = mode(angles.round(decimals=2))[0][0]
-
-    # Determine grid spacing and rotation angle
-    grid_spacing = 1 / dominant_distance
-    rotation_angle = np.rad2deg(dominant_angles)
-
-    # Count the number of peaks at specific angles
-    angle_counts, angle_bins = np.histogram(angles, bins=12)
-
-    # If peaks are at multiples of 90 degrees, it's likely a square grid
-    # If peaks are at multiples of 60 degrees, it's likely a hexagonal grid
-
-    # Define lattice vectors based on grid type
-    if is_square_grid:
-        # Square grid lattice vectors
-        a1 = grid_spacing * np.array([np.cos(np.deg2rad(rotation_angle)), np.sin(np.deg2rad(rotation_angle))])
-        a2 = grid_spacing * np.array([np.cos(np.deg2rad(rotation_angle + 90)), np.sin(np.deg2rad(rotation_angle + 90))])
-    else:
-        # Hexagonal grid lattice vectors
-        a1 = grid_spacing * np.array([np.cos(np.deg2rad(rotation_angle)), np.sin(np.deg2rad(rotation_angle))])
-        a2 = grid_spacing * np.array([np.cos(np.deg2rad(rotation_angle + 60)), np.sin(np.deg2rad(rotation_angle + 60))])
-
-    # Generate grid points
-    num_points = 100  # Adjust based on the extent of your data
-    grid_points = []
-    for i in range(-num_points, num_points):
-        for j in range(-num_points, num_points):
-            point = i * a1 + j * a2
-            if xmin <= point[0] <= xmax and ymin <= point[1] <= ymax:
-                grid_points.append(point)
-
-    grid_points = np.array(grid_points)
 
 # -----------------------------------------------------------------------------
 # Rotation and alignment
 
-def rotate_coordinates(coordinates, angle, anchor=None, buffer=0):
-    """Rotate a set of coordinates around the origin."""
+def rotate_coordinates(
+    coordinates: np.ndarray,
+    angle: float,
+    anchor: np.ndarray = None,
+    buffer: int = 0
+) -> np.ndarray:
+    """Rotate a set of coordinates around the origin.
+
+    Args:
+        coordinates (np.ndarray): An array of coordinates to rotate.
+        angle (float): The angle of rotation in degrees.
+        anchor (np.ndarray): The point to rotate the coordinates around.
+        buffer (int): The buffer to add around the grid.
+
+    Returns:
+        np.ndarray: The rotated coordinates.
+
+    """
     if isinstance(buffer, int):
         buffer = np.array([buffer, buffer])
 
@@ -184,8 +152,22 @@ def rotate_coordinates(coordinates, angle, anchor=None, buffer=0):
     return np.round(final_coords).astype(int)
 
 
-def create_rotated_grid(coordinates, angle, radius=3):
-    """Create a grid with squares around the rotated coordinates."""
+def create_rotated_grid(
+    coordinates: np.ndarray,
+    angle: float,
+    radius: int = 3
+) -> np.ndarray:
+    """Create a grid with squares around the rotated coordinates.
+
+    Args:
+        coordinates (np.ndarray): An array of coordinates to rotate.
+        angle (float): The angle of rotation in degrees.
+        radius (int): The radius of the square around each coordinate.
+
+    Returns:
+        np.ndarray: The rotated grid
+
+    """
     # Calculate grid size
     M = np.max(coordinates[:, 0]) + 50
     N = np.max(coordinates[:, 1]) + 50
@@ -215,8 +197,26 @@ def create_rotated_grid(coordinates, angle, radius=3):
     return grid
 
 
-def find_angle(coordinates, angle_min=-10, angle_max=10, angle_step=0.1, axis=0):
-    """Find the angle which minimizes the sum of the maximum values along an axis."""
+def find_angle(
+    coordinates: np.ndarray,
+    angle_min: float = -10,
+    angle_max: float = 10,
+    angle_step: float = 0.1,
+    axis: int = 0
+) -> float:
+    """Find the angle which minimizes the sum of the maximum values along an axis.
+
+    Args:
+        coordinates (np.ndarray): An array of coordinates to rotate.
+        angle_min (float): The minimum angle to search.
+        angle_max (float): The maximum angle to search.
+        angle_step (float): The step size for the search.
+        axis (int): The axis to calculate the maximum values along.
+
+    Returns:
+        float: The angle which minimizes the sum of the maximum values along the axis
+
+    """
     min_sum = np.inf
     best_angle = 0
     for angle in np.arange(angle_min, angle_max, angle_step):
@@ -228,7 +228,17 @@ def find_angle(coordinates, angle_min=-10, angle_max=10, angle_step=0.1, axis=0)
     return best_angle
 
 
-def count_rows(grid, min_length=5):
+def count_rows(grid: np.ndarray, min_length: int = 5) -> int:
+    """Count the number of rows in a grid.
+
+    Args:
+        grid (np.ndarray): A binary grid.
+        min_length (int): The minimum length of a row.
+
+    Returns:
+        int: The number of rows in the grid.
+
+    """
     # Find the maximum value along the 0-axis (x-axis)
     amax = grid.max(axis=0)
 
@@ -249,8 +259,22 @@ def count_rows(grid, min_length=5):
     return count
 
 
-def get_median_x_distance(coords, grid, n_rows=None):
-    """Calculate the average distance between centroids along the x-axis."""
+def get_median_x_distance(
+    coords: np.ndarray,
+    grid: np.ndarray,
+    n_rows: Optional[int] = None
+) -> int:
+    """Calculate the median distance between centroids along the x-axis.
+
+    Args:
+        coords (np.ndarray): An array of coordinates.
+        grid (np.ndarray): A binary grid.
+        n_rows (int, optional): The number of rows in the grid.
+
+    Returns:
+        int: The median x-distance between centroids.
+
+    """
     if n_rows is None:
         n_rows = count_rows(grid)
 
@@ -275,8 +299,22 @@ def get_median_x_distance(coords, grid, n_rows=None):
     return int(np.round(avg_x_dist))
 
 
-def get_median_y_distance(coords, grid, n_rows=None):
-    """Calculate the average distance between centroids along the y-axis."""
+def get_median_y_distance(
+    coords: np.ndarray,
+    grid: np.ndarray,
+    n_rows: Optional[int] = None
+) -> int:
+    """Calculate the median distance between centroids along the y-axis.
+
+    Args:
+        coords (np.ndarray): An array of coordinates.
+        grid (np.ndarray): A binary grid.
+        n_rows (int, optional): The number of rows in the grid.
+
+    Returns:
+        int: The median y-distance between centroids.
+
+    """
     if n_rows is None:
         n_rows = count_rows(grid)
 
@@ -300,8 +338,22 @@ def get_median_y_distance(coords, grid, n_rows=None):
     return int(np.round(avg_y_dist))
 
 
-def get_x_row_offset(grid, max_offset=100, n_rows=None):
-    """Find the best x-offset for aligning rows."""
+def get_x_row_offset(
+    grid: np.ndarray,
+    max_offset: int = 100,
+    n_rows: Optional[int] = None
+) -> int:
+    """Find the best x-offset for aligning rows.
+
+    Args:
+        grid (np.ndarray): A binary grid.
+        max_offset (int): The maximum offset to search.
+        n_rows (int, optional): The number of rows in the grid.
+
+    Returns:
+        int: The best x-row offset.
+
+    """
     if n_rows is None:
         n_rows = count_rows(grid)
 
@@ -338,7 +390,7 @@ def get_x_row_offset(grid, max_offset=100, n_rows=None):
     return best_offset
 
 
-def detect_grid(coords):
+def detect_grid(coords: np.ndarray) -> "GridDefinition":
     from .segmentation import GridDefinition
 
     # Find the rotation angle
@@ -366,7 +418,16 @@ def detect_grid(coords):
     return GridDefinition(x_spacing=x_dist, y_spacing=y_dist, angle=angle, row_offset=row_offset)
 
 
-def find_closest_to_centroid(points):
+def find_closest_to_centroid(points: np.ndarray) -> np.ndarray:
+    """Find the point closest to the centroid of a set of points.
+
+    Args:
+        points (np.ndarray): An array of points, of shape (n, 2).
+
+    Returns:
+        np.ndarray: The point closest to the centroid.
+
+    """
     # Convert points to a NumPy array if it's not already
     points = np.array(points)
 

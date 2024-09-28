@@ -2,22 +2,21 @@
 
 
 import os
-import fnmatch
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import re
 
-from typing import List, Union
+from typing import List
 from tqdm import tqdm
 from PIL import Image
-from os.path import join, exists, isdir, isfile, basename, dirname
+from os.path import join, exists, isdir, basename, dirname
 
 # --------------------------------------------------------------------------- #
 # Internal utility functions
 
 def _get_path_without_ext(file: str) -> str:
-    """Get the filename without the extension."""
+    """Get the full file path without the extension."""
     return join(dirname(file), '.'.join(basename(file).split('.')[:-1]))
 
 
@@ -118,7 +117,7 @@ def generate_comparison_plot(
     save_path: str = None
 ) -> None:
     """
-    Create a plot of two images side by side. This is meant to be 
+    Create a plot of two images side by side. This is meant to be
     used to compare images from different time points that have
     discordant ROI coordinates.
 

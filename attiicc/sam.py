@@ -3,7 +3,7 @@ import cv2
 import os
 import numpy as np
 import segment_anything
-from typing import Dict, Tuple, List, Optional
+from typing import List, Optional
 
 from .segmentation import Segmentation, Plate, GridDefinition
 from . import utils
@@ -108,7 +108,7 @@ class SamSegmenter:
         return sam_segmentation
 
     def build_plate(self, image, grid_definition: Optional[GridDefinition] = None) -> Plate:
-        """Build a plate object from a grid definition.
+        """Build a Plate object from a grid definition.
 
         Args:
             grid_definition (GridDefinition): The grid definition object.
@@ -130,7 +130,9 @@ class SamSegmenter:
         return plate
 
     def build_plates(self, images: List[str], grid_definition: Optional[GridDefinition] = None) -> List[Plate]:
-        """Build a list of plate objects from a list of image paths.
+        """Build a list of Plate objects from a list of image paths.
+
+        These can then be stacked with a PlateStack object.
 
         Args:
             images (List[str]): The list of image paths.

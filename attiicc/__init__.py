@@ -7,7 +7,6 @@ from .segmentation import (
     PlateStack,
     GridDefinition,
     Segmentation,
-
 )
 from .experiment import NanoExperiment
 from . import segmentation as sam

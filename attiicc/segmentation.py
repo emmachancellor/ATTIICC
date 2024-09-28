@@ -19,13 +19,38 @@ from .contours import (
 # -----------------------------------------------------------------------------
 
 class GridDefinition:
-    """Class to store the definition of a grid schematic."""
+    """Class to store the definition of a grid schematic.
 
-    def __init__(self, x_spacing, y_spacing, angle, row_offset, shape_contours=None):
+    The grid definition includes the x and y spacing between wells, the angle
+    of the grid, the row offset (how far to the right each row is offset
+    from the previous row), and optionally, the shape of the wells.
+
+    """
+
+    def __init__(
+        self,
+        x_spacing: int,
+        y_spacing: int,
+        angle: float,
+        row_offset: int,
+        shape_contours: Optional[np.ndarray] = None
+    ) -> None:
+        """Initialize the grid definition.
+
+        Args:
+            x_spacing (int): The spacing between wells in the x-direction.
+            y_spacing (int): The spacing between wells in the y-direction.
+            angle (float): The angle of the grid.
+            row_offset (int): The offset of each row.
+            shape_contours (np.ndarray, optional): The shape contours of the wells.
+                Default is None.
+
+        """
         self.x_spacing = x_spacing
         self.y_spacing = y_spacing
         self.angle = angle
         self.row_offset = row_offset
+        shape_contours = np.array(shape_contours) if shape_contours is not None else None
         self.shape_contours = shape_contours
 
     def __repr__(self):
@@ -35,34 +60,77 @@ class GridDefinition:
         return f"<GridDefinition(\n  x_spacing={self.x_spacing},\n  y_spacing={self.y_spacing},\n  angle={self.angle},\n  row_offset={self.row_offset},\n  has_shape={self.shape_contours is not None}\n)>"
 
     def to_dict(self):
+        """Convert the grid definition to a dictionary."""
         return {
             "x_spacing": self.x_spacing,
             "y_spacing": self.y_spacing,
             "angle": self.angle,
-            "row_offset": self.row_offset
+            "row_offset": self.row_offset,
+            "shape_contours": self.shape_contours
         }
 
     @classmethod
     def from_dict(cls, grid_dict):
+        """Create a grid definition from a dictionary."""
         return cls(
             x_spacing=grid_dict["x_spacing"],
             y_spacing=grid_dict["y_spacing"],
             angle=grid_dict["angle"],
-            row_offset=grid_dict["row_offset"]
+            row_offset=grid_dict["row_offset"],
+            shape_contours=(np.array(grid_dict["shape_contours"])
+                            if grid_dict["shape_contours"] is not None else None)
         )
 
+    @classmethod
+    def load(cls, path: str) -> "GridDefinition":
+        """Load a grid definition from a .npz file."""
+        data = np.load(path)
+        return cls.from_dict(data)
+
     @property
-    def has_shape(self):
+    def has_shape(self) -> bool:
+        """Check if the grid definition has shape contours."""
         return self.shape_contours is not None
 
-    def set_shape(self, shape_contours, rotate=False):
+    def save(self, path: str) -> None:
+        """Save the grid definition to a .npz file."""
+        np.savez(path, **self.to_dict())
+
+    def set_shape(self, shape_contours: np.ndarray, rotate: bool = False) -> None:
+        """Set the shape contours of the grid.
+
+        Args:
+            shape_contours (list): A 2D array of coordinates indicating the shape contour.
+            rotate (bool, optional): Whether to rotate the shape contour. Default is False.
+
+        """
+        # Convert the shape contours to a numpy array
+        shape_contours = np.array(shape_contours)
+        # Rotate the shape contours if necessary
         if rotate:
             self.shape_contours = rotate_coordinates(shape_contours, self.angle)
         else:
             self.shape_contours = shape_contours
 
-    def build(self, anchor, x_max, y_max, img=None):
-        """Build a grid of wells from the grid definition."""
+    def build(
+        self,
+        anchor: Tuple[int, int],
+        x_max: int,
+        y_max: int,
+        img: Optional[np.ndarray] = None
+    ) -> "Plate":
+        """Build a grid of wells from the grid definition.
+
+        Args:
+            anchor (tuple): The anchor point of the grid.
+            x_max (int): The maximum x-coordinate of the image.
+            y_max (int): The maximum y-coordinate of the image.
+            img (np.ndarray, optional): The image to plot the grid on. Default is None.
+
+        Returns:
+            Plate: A collection of Well objects.
+
+        """
         # Unpack the anchor
         anchor_x, anchor_y = anchor
 
@@ -126,6 +194,7 @@ class GridDefinition:
 
 
 class Well:
+    """Class to store information about a single well on a plate."""
 
     def __init__(
         self,
@@ -141,6 +210,9 @@ class Well:
             roi (ImagejRoi): The ROI object.
             box (tuple): The boundary box of the ROI in XYWH format.
             centroid (tuple): The centroid of the ROI.
+
+        Keyword Args:
+            img (np.ndarray, optional): The underlying image. Default is None.
 
         """
         self.roi = roi
@@ -229,6 +301,11 @@ class Plate:
 
         Args:
             *wells (Well): A collection of Well objects.
+
+        Keyword Args:
+            img (np.ndarray, optional): The underlying image. Default is None.
+            grid_definition (GridDefinition, optional): The grid definition.
+                Default is None.
 
         """
         self.wells = wells
@@ -380,6 +457,13 @@ class Plate:
 
 
 class PlateStack:
+    """Class to store a stack of well grids.
+
+    A PlateStack is a collection of Plate objects, each representing a grid of wells.
+    The PlateStack object can be used to store multiple grids of wells, such as those
+    obtained from different time points or fields of view.
+
+    """
 
     def __init__(
         self,
@@ -390,6 +474,8 @@ class PlateStack:
 
         Args:
             *well_grids (Plate): A collection of Plate objects.
+
+        Keyword Args:
             img (np.ndarray, optional): The image to plot the grid on.
 
         """
@@ -478,6 +564,15 @@ class PlateStack:
 # -----------------------------------------------------------------------------
 
 class Segmentation:
+    """Class to store the results of a segmentation model.
+
+    The Segmentation object stores the masks generated by a segmentation model,
+    along with additional information such as the area, bounding box, and centroid
+    of each mask. The object can be used to filter masks based on area, plot the
+    masks, and generate ROIs from the masks.
+
+    """
+
     def __init__(
         self,
         masks: List[Dict],
