@@ -3,9 +3,9 @@ import cv2
 import os
 import numpy as np
 import segment_anything
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 
-from .segmentation import Segmentation
+from .segmentation import Segmentation, Plate, GridDefinition
 from . import utils
 
 
@@ -106,3 +106,39 @@ class SamSegmenter:
         sam_segmentation = Segmentation(sam_result, image_rgb, image_path=image_path)
 
         return sam_segmentation
+
+    def build_plate(self, image, grid_definition: Optional[GridDefinition] = None) -> Plate:
+        """Build a plate object from a grid definition.
+
+        Args:
+            grid_definition (GridDefinition): The grid definition object.
+
+        Returns:
+            plate (Plate): The plate object.
+
+        """
+        # Segment the image.
+        segmentation = self.segment(image)
+
+        # Find the wells.
+        plate = segmentation.find_wells()
+
+        # Apply the grid definition, if supplied.
+        if grid_definition is not None:
+            plate = plate.apply_grid(grid_definition)
+
+        return plate
+
+    def build_plates(self, images: List[str], grid_definition: Optional[GridDefinition] = None) -> List[Plate]:
+        """Build a list of plate objects from a list of image paths.
+
+        Args:
+            images (List[str]): The list of image paths.
+            grid_definition (GridDefinition): The grid definition object.
+
+        Returns:
+            plates (List[Plate]): The list of plate objects.
+
+        """
+        plates = [self.build_plate(image, grid_definition) for image in images]
+        return plates

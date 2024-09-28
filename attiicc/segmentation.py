@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cupy as cp
 import math
+from PIL import Image
 from os.path import join, exists
+from scipy.spatial import cKDTree
 
 from typing import Dict, Tuple, List, Optional
 from .utils import _get_filename_without_ext
@@ -60,11 +62,11 @@ class GridDefinition:
             self.shape_contours = shape_contours
 
     def build(self, anchor, x_max, y_max, img=None):
-        """Build a grid of regions from the grid definition."""
+        """Build a grid of wells from the grid definition."""
         # Unpack the anchor
         anchor_x, anchor_y = anchor
 
-        # Keep track of region centroids
+        # Keep track of well centroids
         centroids = []
 
         # Starting at the anchor (center), build out the grid centroids
@@ -108,29 +110,32 @@ class GridDefinition:
                 x = row_anchor_x - (j * self.x_spacing)
                 centroids.append((x, y))
 
-        # Rotate the centroids around the anchor
+        # Rotate the centroids around the anchor and remove duplicates.
         centroids = np.array(centroids)
+        centroids = np.unique(centroids, axis=0)
         if self.angle != 0:
             centroids = rotate_coordinates(centroids, angle=-1 * self.angle, anchor=anchor)
 
         # Finally, filter out any centroids that are outside the image bounds
         centroids = [tuple(c) for c in centroids if 0 <= c[0] < x_max and 0 <= c[1] < y_max]
 
-        # Build the RegionGrid
+        # Build the Plate object
         rotated_shape = rotate_coordinates(self.shape_contours, angle=-1 * self.angle)
-        regions = [Region(rotated_shape, centroid) for centroid in centroids]
-        return RegionGrid(*regions, img=img, grid_definition=self)
+        wells = [Well(rotated_shape, centroid, img=img) for centroid in centroids]
+        return Plate(*wells, img=img, grid_definition=self)
 
 
-class Region:
+class Well:
 
     def __init__(
         self,
         roi: np.ndarray,
         centroid: Tuple[int,int],
         box: Optional[Tuple[int,int,int,int]] = None,
+        *,
+        img: Optional[np.ndarray] = None,
     ) -> None:
-        """Build a SAM Region object, representing a single well plate.
+        """Build a Well object, representing a single well on a larger plate.
 
         Args:
             roi (ImagejRoi): The ROI object.
@@ -143,15 +148,16 @@ class Region:
         if box is None:
             box = cv2.boundingRect(roi)
         self.box = box
+        self.img = img
 
     def __repr__(self):
         return str(self)
 
     def __str__(self):
-        return f"<Region object with centroid {self.centroid}>"
+        return f"<Well object with centroid {self.centroid}>"
 
     def plot(self):
-        """Plot the region."""
+        """Plot the well."""
         # Plot the ROI
         plt.plot(*zip(*self.roi), color='black')
 
@@ -164,91 +170,140 @@ class Region:
         # Ensure the origin is in the top left
         plt.gca().invert_yaxis()
 
-        plt.show()
+    def roi_to_mask(self, image_shape: Tuple[int, int]) -> np.ndarray:
+        """Convert the ROI to a binary mask.
+
+        Args:
+            image_shape (tuple): Shape of the mask (height, width).
+
+        Returns:
+            mask (np.ndarray): Binary mask of the ROI.
+        """
+        # Convert ROI relative coordinates to absolute coordinates by adding centroid offset
+        roi_absolute = self.roi + np.array(self.centroid)
+
+        # Create a blank mask of the image size
+        mask = np.zeros(image_shape[:2], dtype=np.uint8)
+
+        # Fill the mask with the ROI using cv2.fillPoly
+        cv2.fillPoly(mask, [roi_absolute.astype(np.int32)], 255)
+
+        return mask
+
+    def get_image(self) -> Image:
+        """Extract the region of the image corresponding to the ROI.
+
+        Returns:
+            extracted_image (np.ndarray): Image cropped to the ROI.
+        """
+        if self.img is None:
+            raise ValueError("Image data is missing in the Well object.")
+
+        # Create a mask from the ROI
+        mask = self.roi_to_mask(self.img.shape)
+
+        # Apply the mask to the image
+        extracted_image = cv2.bitwise_and(self.img, self.img, mask=mask)
+
+        # Crop the image using the bounding box
+        x, y, w, h = self.box
+        x += self.centroid[0]
+        y += self.centroid[1]
+        cropped_image = extracted_image[y:y + h, x:x + w]
+
+        image = Image.fromarray(cropped_image)
+
+        return image
 
 
-class RegionCollection:
+
+class Plate:
 
     def __init__(
         self,
-        *regions: Region,
-        img: Optional[np.ndarray] = None
+        *wells: Well,
+        img: Optional[np.ndarray] = None,
+        grid_definition: Optional[GridDefinition] = None
     ) -> None:
-        """Build a loose, unordered collection of Regions.
+        """Build a collection of Wells.
 
         Args:
-            *regions (Region): A collection of Region objects.
+            *wells (Well): A collection of Well objects.
 
         """
-        self.regions = regions
+        self.wells = wells
         self.img = img
+        self.grid_definition = grid_definition
 
     def __repr__(self):
         return str(self)
 
     def __str__(self):
-        return f"<RegionCollection object with {len(self.regions)} regions>"
+        return f"<Plate object with {len(self.wells)} wells>"
 
     def __len__(self):
-        return len(self.regions)
+        return len(self.wells)
 
     def __getitem__(self, idx):
-        return self.regions[idx]
+        return self.wells[idx]
 
     def __iter__(self):
-        return iter(self.regions)
+        return iter(self.wells)
 
     def __next__(self):
-        return next(self.regions)
+        return next(self.wells)
 
     def __contains__(self, item):
-        return item in self.regions
+        return item in self.wells
 
     def __add__(self, other):
-        return RegionCollection(*(self.regions + other.regions), img=self.img)
+        return Plate(*(self.wells + other.wells), img=self.img)
 
     def __sub__(self, other):
-        return RegionCollection(*(r for r in self.regions if r not in other.regions), img=self.img)
+        return Plate(*(r for r in self.wells if r not in other.wells), img=self.img)
 
     def __eq__(self, other):
-        return self.regions == other.regions
+        return self.wells == other.wells
 
     def __ne__(self, other):
-        return self.regions != other.regions
+        return self.wells != other.wells
+
+    def pop(self, idx):
+        return self.wells.pop(idx)
 
     @property
     def centroids(self) -> List[Tuple[int,int]]:
-        return np.array([r.centroid for r in self.regions])
+        return np.array([r.centroid for r in self.wells])
 
-    def remove_edge_regions(self, threshold: float = 0.9) -> None:
-        """Remove regions at the edge of the image based on
-        the percentage of the region that is inside the image bounds.
+    def remove_edge_wells(self, threshold: float = 0.9) -> None:
+        """Remove wells at the edge of the image based on
+        the percentage of the well that is inside the image bounds.
 
         Args:
             threshold (float, optional): The threshold for the percentage of
-                the region inside the image bounds. Default is 0.9.
+                the well inside the image bounds. Default is 0.9.
 
         """
-        # For each region, find what percentage of the region is inside the image bounds
+        # For each well, find what percentage of the well is inside the image bounds
         img_h, img_w = self.img.shape[:2]
-        orig_regions = self.regions
-        regions = []
-        for region in self.regions:
+        orig_wells = self.wells
+        wells = []
+        for well in self.wells:
             # Get the bounding box
-            x, y, w, h = region.box
+            x, y, w, h = well.box
 
             # Adjust for the image centroid
-            x += region.centroid[0]
-            y += region.centroid[1]
+            x += well.centroid[0]
+            y += well.centroid[1]
 
             x1, y1, x2, y2 = x, y, x + w, y + h
             x1, y1, x2, y2 = max(0, x1), max(0, y1), min(img_w, x2), min(img_h, y2)
             area = (x2 - x1) * (y2 - y1)
-            region_area = w * h
-            if area / region_area > threshold:
-                regions.append(region)
-        self.regions = regions
-        print("Removed", len(orig_regions) - len(regions), "edge regions.")
+            well_area = w * h
+            if area / well_area > threshold:
+                wells.append(well)
+        self.wells = wells
+        print("Removed", len(orig_wells) - len(wells), "edge wells.")
 
     def plot(
         self,
@@ -256,45 +311,46 @@ class RegionCollection:
         *,
         show_labels: bool = True,
         show_image: bool = True,
-        show_contours: bool = True
+        show_contours: bool = True,
+        ax: Optional[plt.Axes] = None
     ):
-        """Plot the regions on the image."""
+        """Plot the wells on the image."""
         if img is None:
             img = self.img
 
-        # Plot the region centroids.
-        if len(self.regions) > 0:
-            plt.scatter(*zip(*[r.centroid for r in self.regions]), color='yellow', marker='o')
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(10, 10))
+
+        # Plot the well centroids.
+        if len(self.wells) > 0:
+            ax.scatter(*zip(*[r.centroid for r in self.wells]), color='yellow', marker='o')
 
         # Plot the reference image.
         if show_image and img is not None:
-            plt.imshow(img)
+            ax.imshow(img)
 
-        # Plot the region contours.
+        # Plot the well contours.
         if show_contours:
-            for region in self.regions:
-                plt.plot(*zip(*(region.roi + region.centroid)), color='red')
+            for well in self.wells:
+                ax.plot(*zip(*(well.roi + well.centroid)), color='red')
 
         # Show labels
         if show_labels:
-            for i, region in enumerate(self.regions):
-                x, y = region.centroid
-                plt.text(x, y, str(i), color='white')
-
-        plt.show()
+            for i, well in enumerate(self.wells):
+                x, y = well.centroid
+                ax.text(x, y, str(i), color='white')
 
     def get_average_contour(self, **kwargs) -> np.ndarray:
-        """Get the average contour of the regions."""
-        contours = [r.roi for r in self.regions]
+        """Get the average contour of the wells."""
+        contours = [r.roi for r in self.wells]
         return calculate_average_contour(contours, **kwargs)
 
     def plot_average_contour(self, **kwargs):
-        """Plot the average contour of the regions."""
+        """Plot the average contour of the wells."""
         average_contour = self.get_average_contour(**kwargs)
         plt.plot(*zip(*average_contour), color='black')
         plt.gca().set_aspect('equal', adjustable='box')
         plt.gca().invert_yaxis()
-        plt.show()
 
     def detect_grid(self) -> GridDefinition:
         # Detect the well spacing and orientation
@@ -308,8 +364,8 @@ class RegionCollection:
 
         return grid_def
 
-    def apply_grid(self, grid: GridDefinition) -> "RegionGrid":
-        """Convert this collection into a grid of regions."""
+    def apply_grid(self, grid: GridDefinition) -> "Plate":
+        """Convert this collection into a grid of wells."""
         # First, find the anchor point,
         # which will be the point nearest to the center.
         anchor = find_closest_to_centroid(self.centroids)
@@ -317,30 +373,107 @@ class RegionCollection:
         # Then, build the grid.
         return grid.build(anchor, x_max=self.img.shape[1], y_max=self.img.shape[0], img=self.img)
 
-    def build_grid(self) -> "RegionGrid":
-        """Build a grid of regions."""
+    def build_grid(self) -> "Plate":
+        """Build a grid of wells."""
         grid_def = self.detect_grid()
         return self.apply_grid(grid_def)
 
 
-class RegionGrid(RegionCollection):
+class PlateStack:
 
     def __init__(
         self,
-        *regions: Region,
-        img: Optional[np.ndarray] = None,
-        grid_definition: Optional[GridDefinition] = None
+        *well_grids: Plate,
+        img: Optional[np.ndarray] = None
     ) -> None:
-        """Build a grid of regions.
+        """Build a stack of well grids.
 
         Args:
-            *regions (Region): A collection of Region objects.
+            *well_grids (Plate): A collection of Plate objects.
             img (np.ndarray, optional): The image to plot the grid on.
-            grid (GridDefinition, optional): The grid definition.
 
         """
-        super().__init__(*regions, img=img)
-        self.grid_definition = grid_definition
+        self.well_grids = well_grids
+        if img is None:
+            img = well_grids[0].img
+        self._build_stack()
+
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return f"<PlateStack object with {len(self.well_grids)} well grids>"
+
+    def __len__(self):
+        return len(self.well_grids)
+
+    def __getitem__(self, idx):
+        return self.well_grids[idx]
+
+    def _build_stack(self):
+        """Build a stack of wells."""
+
+        # Find the indices that are common to all grids.
+        reference_grid = self.well_grids[0]
+        common_indices = self._get_matching_well_indices(reference_grid, self.well_grids[1:])
+
+        # In the reference well, remove the wells that are not common to all grids.
+        reference_grid.wells = [reference_grid.wells[i] for i in common_indices]
+
+        # In the subsequent wells, remove the wells that are not common to all grids.
+        tree = cKDTree(reference_grid.centroids)
+        for well_grid in self.well_grids[1:]:
+            distances, ref_indices = tree.query(well_grid.centroids, k=1)
+
+            # Remove indices that are very far away
+            max_dist = reference_grid.grid_definition.x_spacing // 2
+            idx_to_keep = np.where(distances < max_dist)[0]
+
+            # Reorder the wells to match the reference grid
+            idx_to_keep = sorted(idx_to_keep, key=lambda x: ref_indices[x])
+            well_grid.wells = [well_grid.wells[i] for i in idx_to_keep]
+
+            assert len(well_grid.wells) == len(reference_grid.wells), "The number of wells in the grids do not match."
+
+
+    @staticmethod
+    def _get_matching_well_indices(
+        reference: Plate,
+        wells: List[Plate]
+    ) -> List[int]:
+        """Find the indices of the wells that are common to all grids."""
+        # Build a KDTree from the reference grid.
+        tree = cKDTree(reference.centroids)
+
+        # For each subsequent grid, find the nearest neighbor in the reference grid.
+        matched_well_idx = [np.arange(len(reference.centroids))]
+        for well_grid in wells:
+            tree = cKDTree(well_grid.centroids)
+            distances, indices = tree.query(well_grid.centroids, k=1)
+
+            # Remove indices that are very far away
+            max_dist = reference.grid_definition.x_spacing // 2
+            indices = indices[distances < max_dist]
+
+            matched_well_idx.append(indices.flatten())
+
+        # Find the indices that are common to all grids.
+        common_indices = set.intersection(*[set(indices) for indices in matched_well_idx])
+
+        return list(common_indices)
+
+    def plot_well(self, well_idx: int):
+        """Plot a specific well from a specific grid."""
+        if well_idx >= len(self.well_grids[0]):
+            raise ValueError(f"Well index {well_idx} is out of range.")
+
+        fig, ax = plt.subplots(1, len(self.well_grids), figsize=(5 * len(self.well_grids), 5))
+        for i in range(len(self.well_grids)):
+            well = self.well_grids[i][well_idx]
+            ax[i].imshow(well.get_image())
+            ax[i].set_title(f"Plate {i}")
+            ax[i].axis('off')
+
 
 # -----------------------------------------------------------------------------
 
@@ -456,7 +589,6 @@ class Segmentation:
         if save:
             fig.savefig(save_path)
 
-        plt.show()
 
     def plot_masks(
         self,
@@ -504,7 +636,6 @@ class Segmentation:
             if save_path:
                 plt.savefig(save_path)
 
-        plt.show()
 
     def _filter_duplicate_masks(
         self,
@@ -639,7 +770,7 @@ class Segmentation:
         contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         return contours
 
-    def find_regions(
+    def find_wells(
         self,
         min_area: int = 11100,
         filter_distance: int = 10,
@@ -648,7 +779,7 @@ class Segmentation:
         validation_path: bool = None,
         save_heatmap: bool = False,
         filter_duplicates: bool = False,
-    ) -> RegionCollection:
+    ) -> Plate:
         """
         Generate ROIs from the segmentation results.
 
@@ -666,7 +797,7 @@ class Segmentation:
             save_heatmap (bool, optional): Whether to save a correlation heatmap of the centroid coordinates.
 
         Returns:
-            RegionCollection containing segmentation Region objects, sorted in order by the y-coordinate of the centroid, and the (X,Y) coordinates of the centroid.
+            Plate containing segmentation Well objects, sorted in order by the y-coordinate of the centroid, and the (X,Y) coordinates of the centroid.
 
         """
         centroid_list = []
@@ -686,7 +817,7 @@ class Segmentation:
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
                         centroid = (cX, cY)
-                        regions[centroid] = Region(points - np.array(centroid), centroid, box)
+                        regions[centroid] = Well(points - np.array(centroid), centroid, box, img=self.img)
                         centroid_list.append(centroid)
 
         # Sort the list of lists by the value at index 0 (x)
@@ -740,5 +871,5 @@ class Segmentation:
                         for file in files:
                             zipf.write(os.path.join(root, file), file)
 
-        return RegionCollection(*regions_to_return, img=self.img)
+        return Plate(*regions_to_return, img=self.img)
 
