@@ -207,7 +207,7 @@ class Well:
         """Build a Well object, representing a single well on a larger plate.
 
         Args:
-            roi (ImagejRoi): The ROI object.
+            roi (np.ndarray): The ROI object.
             box (tuple): The boundary box of the ROI in XYWH format.
             centroid (tuple): The centroid of the ROI.
 
@@ -286,7 +286,6 @@ class Well:
         image = Image.fromarray(cropped_image)
 
         return image
-
 
 
 class Plate:
@@ -467,49 +466,49 @@ class PlateStack:
 
     def __init__(
         self,
-        *well_grids: Plate,
+        *plates: Plate,
         img: Optional[np.ndarray] = None
     ) -> None:
         """Build a stack of well grids.
 
         Args:
-            *well_grids (Plate): A collection of Plate objects.
+            *plates (Plate): A collection of Plate objects.
 
         Keyword Args:
             img (np.ndarray, optional): The image to plot the grid on.
 
         """
-        self.well_grids = well_grids
+        self.plates = plates
         if img is None:
-            img = well_grids[0].img
+            img = plates[0].img
         self._build_stack()
 
     def __repr__(self):
         return str(self)
 
     def __str__(self):
-        return f"<PlateStack object with {len(self.well_grids)} well grids>"
+        return f"<PlateStack object with {len(self.plates)} plates>"
 
     def __len__(self):
-        return len(self.well_grids)
+        return len(self.plates)
 
     def __getitem__(self, idx):
-        return self.well_grids[idx]
+        return self.plates[idx]
 
     def _build_stack(self):
         """Build a stack of wells."""
 
         # Find the indices that are common to all grids.
-        reference_grid = self.well_grids[0]
-        common_indices = self._get_matching_well_indices(reference_grid, self.well_grids[1:])
+        reference_grid = self.plates[0]
+        common_indices = self._get_matching_well_indices(reference_grid, self.plates[1:])
 
         # In the reference well, remove the wells that are not common to all grids.
         reference_grid.wells = [reference_grid.wells[i] for i in common_indices]
 
         # In the subsequent wells, remove the wells that are not common to all grids.
         tree = cKDTree(reference_grid.centroids)
-        for well_grid in self.well_grids[1:]:
-            distances, ref_indices = tree.query(well_grid.centroids, k=1)
+        for plate in self.plates[1:]:
+            distances, ref_indices = tree.query(plate.centroids, k=1)
 
             # Remove indices that are very far away
             max_dist = reference_grid.grid_definition.x_spacing // 2
@@ -517,25 +516,25 @@ class PlateStack:
 
             # Reorder the wells to match the reference grid
             idx_to_keep = sorted(idx_to_keep, key=lambda x: ref_indices[x])
-            well_grid.wells = [well_grid.wells[i] for i in idx_to_keep]
+            plate.wells = [plate.wells[i] for i in idx_to_keep]
 
-            assert len(well_grid.wells) == len(reference_grid.wells), "The number of wells in the grids do not match."
+            assert len(plate.wells) == len(reference_grid.wells), "The number of wells in the grids do not match."
 
 
     @staticmethod
     def _get_matching_well_indices(
         reference: Plate,
-        wells: List[Plate]
+        plates: List[Plate]
     ) -> List[int]:
-        """Find the indices of the wells that are common to all grids."""
+        """Find the indices of the wells that are common to all plates."""
         # Build a KDTree from the reference grid.
         tree = cKDTree(reference.centroids)
 
         # For each subsequent grid, find the nearest neighbor in the reference grid.
         matched_well_idx = [np.arange(len(reference.centroids))]
-        for well_grid in wells:
-            tree = cKDTree(well_grid.centroids)
-            distances, indices = tree.query(well_grid.centroids, k=1)
+        for plate in plates:
+            tree = cKDTree(plate.centroids)
+            distances, indices = tree.query(plate.centroids, k=1)
 
             # Remove indices that are very far away
             max_dist = reference.grid_definition.x_spacing // 2
@@ -550,12 +549,12 @@ class PlateStack:
 
     def plot_well(self, well_idx: int):
         """Plot a specific well from a specific grid."""
-        if well_idx >= len(self.well_grids[0]):
+        if well_idx >= len(self.plates[0]):
             raise ValueError(f"Well index {well_idx} is out of range.")
 
-        fig, ax = plt.subplots(1, len(self.well_grids), figsize=(5 * len(self.well_grids), 5))
-        for i in range(len(self.well_grids)):
-            well = self.well_grids[i][well_idx]
+        fig, ax = plt.subplots(1, len(self.plates), figsize=(5 * len(self.plates), 5))
+        for i in range(len(self.plates)):
+            well = self.plates[i][well_idx]
             ax[i].imshow(well.get_image())
             ax[i].set_title(f"Plate {i}")
             ax[i].axis('off')
