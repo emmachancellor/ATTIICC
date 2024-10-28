@@ -228,7 +228,8 @@ class Well:
     def __str__(self):
         return f"<Well object with centroid {self.centroid}>"
 
-    def plot(self):
+    def plot(self,
+             save_path: Optional[str] = None):
         """Plot the well."""
         # Plot the ROI
         plt.plot(*zip(*self.roi), color='black')
@@ -241,6 +242,10 @@ class Well:
 
         # Ensure the origin is in the top left
         plt.gca().invert_yaxis()
+
+        # Save the plot
+        if save_path:
+            plt.savefig(save_path)
 
     def roi_to_mask(self, image_shape: Tuple[int, int]) -> np.ndarray:
         """Convert the ROI to a binary mask.
@@ -556,8 +561,18 @@ class PlateStack:
         for i in range(len(self.plates)):
             well = self.plates[i][well_idx]
             ax[i].imshow(well.get_image())
-            ax[i].set_title(f"Plate {i}")
+            ax[i].set_title(f"Time Point {i}")
             ax[i].axis('off')
+    
+    def save_all_wells(self, save_dir: str):
+        """Save a specific well from a specific grid."""
+        if not exists(save_dir):
+            os.makedirs(save_dir)   
+        for well_idx in range(len(self.plates[0])):
+            for i in range(len(self.plates)):
+                well = self.plates[i][well_idx]
+                image = well.get_image()
+                image.save(join(save_dir, f"/well_{well_idx}_time_{i}.png"))
 
 
 # -----------------------------------------------------------------------------
