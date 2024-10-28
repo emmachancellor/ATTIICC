@@ -393,7 +393,8 @@ class Plate:
         show_labels: bool = True,
         show_image: bool = True,
         show_contours: bool = True,
-        ax: Optional[plt.Axes] = None
+        ax: Optional[plt.Axes] = None,
+        save_path: Optional[str] = None
     ):
         """Plot the wells on the image."""
         if img is None:
@@ -420,6 +421,10 @@ class Plate:
             for i, well in enumerate(self.wells):
                 x, y = well.centroid
                 ax.text(x, y, str(i), color='white')
+        
+        # Save the plot
+        if save_path:
+            plt.savefig(save_path)
 
     def get_average_contour(self, **kwargs) -> np.ndarray:
         """Get the average contour of the wells."""

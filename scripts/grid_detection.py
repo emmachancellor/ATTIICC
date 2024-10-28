@@ -7,7 +7,7 @@ sam = ac.SamSegmenter(weights)
 
 ### Detect the well plate grid
 # Use a reference image to detect the well plate grid
-reference_img = '/home/ecdyer/labshare/WETLAB/WetLab_Shared/NanoExp1b20240209/Raw/f02d3/scan_Top%20Slide_R_p00_0_A01f02d3.TIF'
+reference_img = '/home/ecdyer/PROJECTS/nanowell_processing/exp1b_PDL1/small_test_data/f00d3/scan_Top Slide_R_p00_0_A01f00d3.TIF'
 
 # Segment the image
 segmentation = sam.segment(reference_img)
@@ -24,7 +24,7 @@ rough_plate = segmentation.find_wells()
 plate = rough_plate.build_grid()
 
 # Remove edge wells
-plate.remove_edge_wells()
+#plate.remove_edge_wells()
 
 # Save the plot
 plate.plot(save_path='/home/ecdyer/PROJECTS/nanowell_processing/exp1b_PDL1/visualizations/plate_grid_Exp1b_PDL1.png')
