@@ -328,14 +328,14 @@ def get_median_y_distance(
         print("y_min: ", y_min, "y_max: ", y_max)
         # Get the grid within the y-limits
         row_centroids = coords[(coords[:, 1] >= y_min) & (coords[:, 1] < y_max)]
-        # if len(row_centroids) == 0:
-        #     avg_y = 30
-        #     #n_rows -= 1
-        #     #row_width = grid.shape[1] // n_rows
-        # else:
-        #     # Get the average y-value for the row
-        print("row_centroids: ", row_centroids[:, 1])
-        avg_y = np.mean(row_centroids[:, 1])
+        if len(row_centroids) == 0:
+            avg_y = 30
+            #n_rows -= 1
+            #row_width = grid.shape[1] // n_rows
+        else:
+            # Get the average y-value for the row
+            print("row_centroids: ", row_centroids[:, 1])
+            avg_y = np.mean(row_centroids[:, 1])
         print("avg_y: ", avg_y)
         row_means.append(avg_y)
 

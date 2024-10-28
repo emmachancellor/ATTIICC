@@ -24,7 +24,7 @@ rough_plate = segmentation.find_wells()
 plate = rough_plate.build_grid()
 
 # Remove edge wells
-#plate.remove_edge_wells()
+plate.remove_edge_wells()
 
 # Save the plot
 plate.plot(save_path='/home/ecdyer/PROJECTS/nanowell_processing/exp1b_PDL1/visualizations/plate_grid_Exp1b_PDL1.png')
