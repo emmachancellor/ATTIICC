@@ -383,6 +383,8 @@ class Plate:
             well_area = w * h
             if area / well_area > threshold:
                 wells.append(well)
+            else:
+                print("Removing edge well:", well.centroid)
         self.wells = wells
         print("Removed", len(orig_wells) - len(wells), "edge wells.")
 
@@ -577,6 +579,7 @@ class PlateStack:
             for i in range(len(self.plates)):
                 well = self.plates[i][well_idx]
                 image = well.get_image()
+                save_path = save_dir + f"/well_{well_idx}_time_{i}.png"
                 image.save(join(save_dir, f"/well_{well_idx}_time_{i}.png"))
 
 

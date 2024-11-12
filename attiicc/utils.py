@@ -202,7 +202,7 @@ def sort_paths(paths: List[str]):
     # Sort the paths using the extract_number function as key
     return sorted(paths, key=extract_number)
 
-def grid_detection(weights, reference_img, grid_def_path, save_path=None):
+def grid_detection(weights, reference_img, grid_def_path, remove_well_threshold=0.9, save_path=None):
     """
     Detects the grid of a well plate in a reference image, saves the plot of the detected grid,
     and saves the grid definition to a specified path.
@@ -234,7 +234,7 @@ def grid_detection(weights, reference_img, grid_def_path, save_path=None):
     plate = rough_plate.build_grid()
 
     # Remove edge wells
-    plate.remove_edge_wells()
+    plate.remove_edge_wells(threshold=remove_well_threshold)
 
     # Save the plot
     if save_path is not None:
@@ -242,5 +242,6 @@ def grid_detection(weights, reference_img, grid_def_path, save_path=None):
 
     # Save the grid definition
     grid_def = plate.grid_definition
+    print(grid_def_path)
     grid_def.save(grid_def_path)
     return grid_def
