@@ -5,7 +5,7 @@ from attiicc.utils import grid_detection
 
 ### Load weights and build segmenter
 weights = '/home/ecdyer/PROJECTS/nanowell_processing/weights/sam_vit_h_4b8939.pth'
-sam = ac.SamSegmenter(weights)
+
 
 # Get images
 data_dir = '/home/ecdyer/PROJECTS/nanowell_processing/exp1b_PDL1/smaller_test_data'
@@ -15,6 +15,8 @@ field_dirs = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if 'd3' in
 print('Field directories:', field_dirs)
 # Loop through each field
 for i, field_dir in enumerate(field_dirs):
+    # Build segmenter
+    sam = ac.SamSegmenter(weights)
     # Get images in the field
     field_part = os.path.basename(field_dir)
     field_id = field_part.split('f')[1].split('d')[0]
