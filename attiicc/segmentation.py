@@ -585,12 +585,16 @@ class PlateStack:
         if not exists(save_dir):
             os.makedirs(save_dir)   
         for well_idx in range(len(self.plates[0])):
+            well_save_dir = join(save_dir, f'well_{well_idx}')
+            if not exists(well_save_dir):
+                os.makedirs(well_save_dir)
             for i in range(len(self.plates)):
                 well = self.plates[i][well_idx]
                 image = well.get_image()
-                dest = join(save_dir, f"well_{well_idx}_time_{i}.png")
-                print("Saving image (well: {}, time: {}, dim: {}) to {}".format(well_idx, i, image.size, dest))
+                dest = join(well_save_dir, f"time_{i}.png")
+                #print("Saving image (well: {}, time: {}, dim: {}) to {}".format(well_idx, i, image.size, dest))
                 image.save(dest)
+        print(f"Saved all wells to {save_dir}")
 
 
 # -----------------------------------------------------------------------------
