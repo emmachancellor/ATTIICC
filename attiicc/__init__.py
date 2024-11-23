@@ -1,3 +1,13 @@
-from attiicc.segmentation.sam import SamSegmenter
-from attiicc.segmentation import sam
-import experiment_utils as eu
+# ATTIICC: ...
+
+from .sam import SamSegmenter
+from .segmentation import (
+    Well,
+    Plate,
+    PlateStack,
+    GridDefinition,
+    Segmentation,
+)
+from .experiment import NanoExperiment
+from . import segmentation as sam
+from . import utils as eu
