@@ -247,41 +247,47 @@ def grid_detection(weights, reference_img, grid_def_path, remove_well_threshold=
     return grid_def
 
 def segment_field(field_dir: str,
-                  sam: ac.SamSegmenter,
+                  sam,
                   field_ref_grid_key: str = 'p00',
                   grid_def_path: str = None,
                   well_save_path: str = None,
-                  grid_vis_path: str = None) -> None:
+                  grid_vis_path: str = None,
+                  use_existing_grids: bool = False) -> None:
     """
     Segment a field of images.
     """
+    from .sam import SamSegmenter
     # Get images in the field
     field_part = os.path.basename(field_dir)
     field_id = field_part.split('f')[1].split('d')[0]
     print('Field ID:', field_id)
-
-    # Path to save reference grid for the field
-    grid_def_path = os.path.join(grid_def_path, f'{field_id}_nanowell.npz')
-    print('Grid definition path:', grid_def_path)
-    if os.path.exists(grid_def_path):
-        print('Grid definition already exists, skipping to next field...')
-        return
     img_list = [os.path.join(field_dir, f) for f in os.listdir(field_dir) if f.endswith('.TIF')]
-    print('Images in field:', img_list)
-
-    # Create a reference grid for the field
-    reference_grid_img = next(img for img in img_list if field_ref_grid_key in img)
-    print('Reference grid image:', reference_grid_img)
-    segmentation = sam.segment(reference_grid_img)
-    rough_plate = segmentation.find_wells()
-    plate = rough_plate.build_grid()
-    plate.remove_edge_wells()
-    grid_def = plate.grid_definition
-    print(grid_def_path)
-    # Create grid definition directory if it doesn't exist
-    if not os.path.exists(os.path.dirname(grid_def_path)):
-        os.makedirs(os.path.dirname(grid_def_path))
-    grid_def.save(grid_def_path)
+    
+    if use_existing_grids is False:
+        # Path to save reference grid for the field
+        grid_def_path = os.path.join(grid_def_path, f'{field_id}_nanowell.npz')
+        print('Grid definition path:', grid_def_path)
+        if os.path.exists(grid_def_path):
+            print('Grid definition already exists, skipping to next field...')
+            return 
+        print('Images in field:', img_list)
+        # Create a reference grid for the field
+        reference_grid_img = next(img for img in img_list if field_ref_grid_key in img)
+        print('Reference grid image:', reference_grid_img)
+        segmentation = sam.segment(reference_grid_img)
+        rough_plate = segmentation.find_wells()
+        plate = rough_plate.build_grid()
+        plate.remove_edge_wells()
+        grid_def = plate.grid_definition
+        print(grid_def_path)
+        # Create grid definition directory if it doesn't exist
+        if not os.path.exists(os.path.dirname(grid_def_path)):
+            os.makedirs(os.path.dirname(grid_def_path))
+        grid_def.save(grid_def_path)
+    else:
+        reference_grids = os.listdir(grid_def_path)
+        ref_grid = next(grid for grid in reference_grids if field_id in grid)
+        grid_def = ac.GridDefinition.load(os.path.join(grid_def_path, ref_grid))
 
     # Build plates for the field
     plates = sam.build_plates(img_list, grid_def)

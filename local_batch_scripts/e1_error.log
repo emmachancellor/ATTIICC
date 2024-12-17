@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/labshare/PROJECTS/NANOWELL_PROCESSING/ATTIICC/e1_well_segmentation.py", line 2, in <module>
+    import attiicc as ac
+  File "/auto/pearson-lab/PROJECTS/NANOWELL_PROCESSING/ATTIICC/attiicc/__init__.py", line 3, in <module>
+    from .sam import SamSegmenter
+  File "/auto/pearson-lab/PROJECTS/NANOWELL_PROCESSING/ATTIICC/attiicc/sam.py", line 1, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'

@@ -436,6 +436,7 @@ class Plate:
         # Save the plot
         if save_path:
             plt.savefig(save_path)
+            plt.close()
 
     def get_average_contour(self, **kwargs) -> np.ndarray:
         """Get the average contour of the wells."""
