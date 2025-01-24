@@ -581,7 +581,9 @@ class PlateStack:
             ax[i].set_title(f"Time Point {i}")
             ax[i].axis('off')
     
-    def save_all_wells(self, save_dir: str):
+    def save_all_wells(self, 
+                       save_dir: str,
+                       well_file_type: str = 'png'):
         """Save a specific well from a specific grid."""
         if not exists(save_dir):
             os.makedirs(save_dir)   
@@ -592,9 +594,17 @@ class PlateStack:
             for i in range(len(self.plates)):
                 well = self.plates[i][well_idx]
                 image = well.get_image()
-                dest = join(well_save_dir, f"time_{i}.png")
-                #print("Saving image (well: {}, time: {}, dim: {}) to {}".format(well_idx, i, image.size, dest))
-                image.save(dest)
+                if isinstance(image, np.ndarray):
+                    pil_image = Image.fromarray(image)
+                else:
+                    pil_image = image  # Assume it's already a PIL Image
+
+                if well_file_type == 'png':
+                    dest = join(well_save_dir, f"time_{i}.png")
+                    pil_image.save(dest)
+                elif well_file_type == 'tif':
+                    dest = join(well_save_dir, f"time_{i}.tif")
+                    pil_image.save(dest, format='TIFF')
         print(f"Saved all wells to {save_dir}")
 
 

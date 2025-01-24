@@ -251,6 +251,7 @@ def segment_field(field_dir: str,
                   field_ref_grid_key: str = 'p00',
                   grid_def_path: str = None,
                   well_save_path: str = None,
+                  well_file_type: str = 'png',
                   grid_vis_path: str = None,
                   use_existing_grids: bool = False) -> None:
     """
@@ -305,5 +306,6 @@ def segment_field(field_dir: str,
         # Create save directory if it doesn't exist
         if not os.path.exists(os.path.join(well_save_path, f'{field_id}_stack')):
             os.makedirs(os.path.join(well_save_path, f'{field_id}_stack'))
-        stack.save_all_wells(os.path.join(well_save_path, f'{field_id}_stack'))
+        stack.save_all_wells(os.path.join(well_save_path, f'{field_id}_stack'),
+                             well_file_type=well_file_type)
     return
