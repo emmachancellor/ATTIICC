@@ -97,13 +97,17 @@ class SamSegmenter:
         else:
             image_bgr = cv2.imread(image_path) # cv2 reads in BGR format
             image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
-
+        # Load 16-bit version of image for later use
+        if utils.is_tif(image_path):
+            img_og = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+        else:
+            img_og = cv2.imread(image_path, cv2.IMREAD_ANYDEPTH)
         # Segment the image.
         mask_generator = segment_anything.SamAutomaticMaskGenerator(self.sam)
         sam_result = mask_generator.generate(image_rgb)
 
         # Build the Segmentation object.
-        sam_segmentation = Segmentation(sam_result, image_rgb, image_path=image_path)
+        sam_segmentation = Segmentation(sam_result, image_rgb, image_path=image_path, img_og=img_og)
 
         return sam_segmentation
 

@@ -253,7 +253,8 @@ def segment_field(field_dir: str,
                   well_save_path: str = None,
                   well_file_type: str = 'png',
                   grid_vis_path: str = None,
-                  use_existing_grids: bool = False) -> None:
+                  use_existing_grids: bool = False,
+                  save_as_og_img: bool = False) -> None:
     """
     Segment a field of images.
     """

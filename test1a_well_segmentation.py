@@ -15,9 +15,9 @@ for channel in channels:
     sam = ac.SamSegmenter(weights)
 
     # Specify the save paths
-    well_save_path = f'/home/ecdyer/labshare/WETLAB/WetLab_Shared/test_1a/tif_well_segmentation_{channel}/stacks'
+    well_save_path = f'/home/ecdyer/labshare/WETLAB/WetLab_Shared/test_1a/16bit_well_segmentation_{channel}/stacks'
     grid_def_path = f'/home/ecdyer/labshare/WETLAB/WetLab_Shared/NanoExp1a20240110/well_segmentation/reference_grids'
-    grid_vis_path = f'/home/ecdyer/labshare/WETLAB/WetLab_Shared/test_1a/tif_well_segmentation_{channel}/visualizations'
+    grid_vis_path = f'/home/ecdyer/labshare/WETLAB/WetLab_Shared/test_1a/16bit_tif_well_segmentation_{channel}/visualizations'
 
     # Get the field directories
     data_dir = '/home/ecdyer/labshare/WETLAB/WetLab_Shared/test_1a/data'
