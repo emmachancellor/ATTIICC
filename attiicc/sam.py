@@ -3,7 +3,7 @@ import cv2
 import os
 import numpy as np
 import segment_anything
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .segmentation import Segmentation, Plate, GridDefinition
 from . import utils
@@ -119,7 +119,9 @@ class SamSegmenter:
     def build_plate(self, 
                     image, 
                     grid_definition: Optional[GridDefinition] = None,
-                    use_og_img: bool = False) -> Plate:
+                    use_og_img: bool = False,
+                    area_range: Tuple[int, int] = (10000, 20000),
+                    filter_distance: int = 10) -> Plate:
         """Build a Plate object from a grid definition.
 
         Args:
@@ -133,7 +135,7 @@ class SamSegmenter:
         segmentation = self.segment(image, use_og_img)
 
         # Find the wells.
-        plate = segmentation.find_wells()
+        plate = segmentation.find_wells(area_range=area_range, filter_distance=filter_distance)
 
         # Apply the grid definition, if supplied.
         if grid_definition is not None:
@@ -144,7 +146,9 @@ class SamSegmenter:
     def build_plates(self, 
                      images: List[str], 
                      grid_definition: Optional[GridDefinition] = None,
-                     use_og_img: bool = False) -> List[Plate]:
+                     use_og_img: bool = False,
+                     area_range: Tuple[int, int] = (10000, 20000),
+                     filter_distance: int = 10) -> List[Plate]:
         """Build a list of Plate objects from a list of image paths.
 
         These can then be stacked with a PlateStack object.
@@ -157,5 +161,5 @@ class SamSegmenter:
             plates (List[Plate]): The list of plate objects.
 
         """
-        plates = [self.build_plate(image, grid_definition, use_og_img) for image in images]
+        plates = [self.build_plate(image, grid_definition, use_og_img, area_range, filter_distance) for image in images]
         return plates

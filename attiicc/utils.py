@@ -293,7 +293,7 @@ def segment_field(field_dir: str,
         ref_grid = next(grid for grid in reference_grids if field_id in grid)
         grid_def = ac.GridDefinition.load(os.path.join(grid_def_path, ref_grid))
 
-    plates = sam.build_plates(img_list, grid_def, use_og_img)
+    plates = sam.build_plates(img_list, grid_def, use_og_img, area_range, filter_distance)
     plates[0].remove_edge_wells()
     for j, p in enumerate(plates):
         grid_dir = os.path.join(grid_vis_path, f'{field_id}_grids')

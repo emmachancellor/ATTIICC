@@ -24,7 +24,7 @@ for channel in channels:
 
     # Select the correct field directories (d0, d1, d2, or d3)
     field_dirs = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if channel in f and os.path.isdir(os.path.join(data_dir, f))]
-    print('Field directories:', field_dirs)
+    print("Field directories:", field_dirs)
 
     for field_dir in field_dirs:
         acu.segment_field(field_dir=field_dir, 

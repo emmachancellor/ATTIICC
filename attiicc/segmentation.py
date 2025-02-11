@@ -917,8 +917,8 @@ class Segmentation:
 
     def find_wells(
         self,
-        area_range: Tuple[int, int] = (2000, 5000),
-        filter_distance: int = 1,
+        area_range: Tuple[int, int] = (10000, 20000),
+        filter_distance: int = 10,
         roi_path: str = None,
         roi_archive: bool = True,
         validation_path: bool = None,
