@@ -297,7 +297,11 @@ class Well:
 
         cropped_image = extracted_image[y:y + h, x:x + w]
 
-        image = Image.fromarray(cropped_image)
+        # Preserve original bit depth by specifying mode based on data type
+        if cropped_image.dtype == np.uint16:
+            image = Image.fromarray(cropped_image, mode='I;16')
+        else:
+            image = Image.fromarray(cropped_image)
 
         return image
 
@@ -308,8 +312,7 @@ class Plate:
         self,
         *wells: Well,
         img: Optional[np.ndarray] = None,
-        grid_definition: Optional[GridDefinition] = None,
-        img_og: Optional[np.ndarray] = None
+        grid_definition: Optional[GridDefinition] = None
     ) -> None:
         """Build a collection of Wells.
 
@@ -325,7 +328,6 @@ class Plate:
         self.wells = wells
         self.img = img
         self.grid_definition = grid_definition
-        self.img_og = img_og
 
     def __repr__(self):
         return str(self)
@@ -596,19 +598,14 @@ class PlateStack:
             for i in range(len(self.plates)):
                 well = self.plates[i][well_idx]
                 image = well.get_image()
-                if isinstance(image, np.ndarray):
-                    if image.dtype != np.uint16:
-                        raise ValueError("Image is not 16-bit. Ensure the input images are 16-bit.")
-                    pil_image = Image.fromarray(image, mode='I;16')
-                else:
-                    pil_image = Image.fromarray(image, mode='I;16')  # Assume it's already a PIL Image
-
                 if well_file_type == 'png':
                     dest = join(well_save_dir, f"time_{i}.png")
-                    pil_image.save(dest)
+                    image.save(dest)
                 elif well_file_type == 'tif':
                     dest = join(well_save_dir, f"time_{i}.tif")
-                    pil_image.save(dest, format='TIFF')
+                    image.save(dest, format='TIFF')
+                elif well_file_type != 'png' or 'tif':
+                    raise ValueError(f"Invalid file type: {well_file_type}. Please use 'png' or 'tif'.")
         print(f"Saved all wells to {save_dir}")
 
 
@@ -630,7 +627,7 @@ class Segmentation:
         img: np.ndarray,
         *,
         image_path: str = None,
-        img_og: np.ndarray = None
+
     ) -> None:
         """Build a SAM Segmentation result object.
 
@@ -645,9 +642,9 @@ class Segmentation:
 
         """
         self.masks = masks
-        self.img = img #RGB image used to create the segmentation mask with SAM, saved as a numpy array
+        self.img = img # Specify which image to use when creating the object (RGB vs. original vs. other)
         self.image_path = image_path
-        self.img_og = img_og # original resolution image
+
 
     @property
     def segmentation(self) -> List[np.ndarray]:
@@ -920,8 +917,8 @@ class Segmentation:
 
     def find_wells(
         self,
-        area_range: Tuple[int, int] = (10000, 20000),
-        filter_distance: int = 10,
+        area_range: Tuple[int, int] = (2000, 5000),
+        filter_distance: int = 1,
         roi_path: str = None,
         roi_archive: bool = True,
         validation_path: bool = None,
@@ -1021,5 +1018,5 @@ class Segmentation:
                         for file in files:
                             zipf.write(os.path.join(root, file), file)
 
-        return Plate(*regions_to_return, img=self.img, img_og=self.img_og)
+        return Plate(*regions_to_return, img=self.img)
 

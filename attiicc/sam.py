@@ -79,7 +79,9 @@ class SamSegmenter:
 
     # --- Public ---------------------------------------------------------------
 
-    def segment(self, image_path: str) -> Segmentation:
+    def segment(self, 
+                image_path: str,
+                use_og_img: bool = False) -> Segmentation:
         """Segment an image using a pretrained SAM model.
 
         Args:
@@ -99,19 +101,25 @@ class SamSegmenter:
             image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) # convert to RGB
         # Load 16-bit version of image for later use
         if utils.is_tif(image_path):
-            img_og = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+            og_img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
         else:
-            img_og = cv2.imread(image_path, cv2.IMREAD_ANYDEPTH)
+            og_img = cv2.imread(image_path, cv2.IMREAD_ANYDEPTH)
         # Segment the image.
         mask_generator = segment_anything.SamAutomaticMaskGenerator(self.sam)
         sam_result = mask_generator.generate(image_rgb)
 
         # Build the Segmentation object.
-        sam_segmentation = Segmentation(sam_result, image_rgb, image_path=image_path, img_og=img_og)
+        if use_og_img:
+            sam_segmentation = Segmentation(sam_result, og_img, image_path=image_path)
+        else:
+            sam_segmentation = Segmentation(sam_result, image_rgb, image_path=image_path)
 
         return sam_segmentation
 
-    def build_plate(self, image, grid_definition: Optional[GridDefinition] = None) -> Plate:
+    def build_plate(self, 
+                    image, 
+                    grid_definition: Optional[GridDefinition] = None,
+                    use_og_img: bool = False) -> Plate:
         """Build a Plate object from a grid definition.
 
         Args:
@@ -122,7 +130,7 @@ class SamSegmenter:
 
         """
         # Segment the image.
-        segmentation = self.segment(image)
+        segmentation = self.segment(image, use_og_img)
 
         # Find the wells.
         plate = segmentation.find_wells()
@@ -133,7 +141,10 @@ class SamSegmenter:
 
         return plate
 
-    def build_plates(self, images: List[str], grid_definition: Optional[GridDefinition] = None) -> List[Plate]:
+    def build_plates(self, 
+                     images: List[str], 
+                     grid_definition: Optional[GridDefinition] = None,
+                     use_og_img: bool = False) -> List[Plate]:
         """Build a list of Plate objects from a list of image paths.
 
         These can then be stacked with a PlateStack object.
@@ -146,5 +157,5 @@ class SamSegmenter:
             plates (List[Plate]): The list of plate objects.
 
         """
-        plates = [self.build_plate(image, grid_definition) for image in images]
+        plates = [self.build_plate(image, grid_definition, use_og_img) for image in images]
         return plates

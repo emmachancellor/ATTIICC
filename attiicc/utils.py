@@ -8,7 +8,7 @@ import numpy as np
 import re
 import attiicc as ac
 
-from typing import List
+from typing import List, Tuple
 from tqdm import tqdm
 from PIL import Image
 from os.path import join, exists, isdir, basename, dirname
@@ -254,7 +254,9 @@ def segment_field(field_dir: str,
                   well_file_type: str = 'png',
                   grid_vis_path: str = None,
                   use_existing_grids: bool = False,
-                  save_as_og_img: bool = False) -> None:
+                  use_og_img: bool = False,
+                  area_range: Tuple[int, int] = (10000,20000),
+                  filter_distance: int = 10) -> None:
     """
     Segment a field of images.
     """
@@ -267,32 +269,31 @@ def segment_field(field_dir: str,
     
     if use_existing_grids is False:
         # Path to save reference grid for the field
-        grid_def_path = os.path.join(grid_def_path, f'{field_id}_nanowell.npz')
-        print('Grid definition path:', grid_def_path)
-        if os.path.exists(grid_def_path):
-            print('Grid definition already exists, skipping to next field...')
-            return 
+        # Create grid definition directory if it doesn't exist
+        if not os.path.exists(grid_def_path):
+            os.makedirs(grid_def_path)
+        file_grid_def = os.path.join(grid_def_path, f'{field_id}_nanowell.npz')
+        print('Grid definition path:', file_grid_def)
+        # if os.path.exists(file_grid_def):
+        #     print('Grid definition already exists, skipping to next field...')
+            
         print('Images in field:', img_list)
         # Create a reference grid for the field
         reference_grid_img = next(img for img in img_list if field_ref_grid_key in img)
         print('Reference grid image:', reference_grid_img)
         segmentation = sam.segment(reference_grid_img)
-        rough_plate = segmentation.find_wells()
+        rough_plate = segmentation.find_wells(area_range=area_range, filter_distance=filter_distance)
         plate = rough_plate.build_grid()
         plate.remove_edge_wells()
         grid_def = plate.grid_definition
-        print(grid_def_path)
-        # Create grid definition directory if it doesn't exist
-        if not os.path.exists(os.path.dirname(grid_def_path)):
-            os.makedirs(os.path.dirname(grid_def_path))
-        grid_def.save(grid_def_path)
+        print('Saving grid definition to:', file_grid_def)
+        grid_def.save(file_grid_def)
     else:
         reference_grids = os.listdir(grid_def_path)
         ref_grid = next(grid for grid in reference_grids if field_id in grid)
         grid_def = ac.GridDefinition.load(os.path.join(grid_def_path, ref_grid))
 
-    # Build plates for the field
-    plates = sam.build_plates(img_list, grid_def)
+    plates = sam.build_plates(img_list, grid_def, use_og_img)
     plates[0].remove_edge_wells()
     for j, p in enumerate(plates):
         grid_dir = os.path.join(grid_vis_path, f'{field_id}_grids')
